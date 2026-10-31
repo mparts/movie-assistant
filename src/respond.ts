@@ -1,0 +1,78 @@
+import { InformationState, LlmClient } from "./types";
+import { hasSignal } from "./rules";
+import { stateSummary } from "./summary";
+
+/** How many candidates the LLM sees (best-ranked first). */
+export const POOL_SHOWN = 8;
+
+const SYSTEM = `You are a warm, easygoing friend who knows movies well, talking out loud with someone to help them decide what to watch tonight. Everything you write is spoken aloud: use 1 to 3 short, natural sentences. No lists, no markdown, no emojis, no stage directions.
+
+How to behave:
+- Have a real conversation. React to what they just said first. Be curious about them, not about a checklist.
+- Gradually get a feel for their taste: what they've enjoyed lately, their mood, who they're watching with, how much time they have. Ask at most ONE light question per turn, and only when it helps. Never ask for something you already know (see "whatWeKnow"). Never interrogate.
+- You don't need to know everything. Once you have a real feel for their taste (a mood, a kind of movie, a movie they love), suggest ONE movie from "candidates" and say in a sentence why it fits what they told you. Choose the candidate whose description best matches their mood and taste, not simply the first one. A time limit alone is not taste: if that's all you know, ask what they're in the mood for instead.
+- If they react to a suggestion (already seen it, not feeling it, sounds good), respond naturally and then adjust or offer a different candidate. If they say yes, wrap up warmly and briefly.
+- If their reaction is lukewarm or vague ("maybe", "sure", "I guess", "hmm"), do NOT just throw another movie at them. Ask one light question to find out what isn't clicking or what they'd rather have. Don't suggest a different movie two turns in a row unless they rejected the last one, had seen it, or asked for another.
+- Only ever suggest a movie that appears in "candidates", and set "recommend" to its id. Never suggest any other movie (you may mention movies the person brought up). The only facts you may state about a candidate are those in its entry: description, genres, year, rating, and runtimeMinutes. If runtimeMinutes is missing, don't mention its length. Never guess.
+- "candidatePool" tells you the situation: "none_yet" = we don't know their taste yet, nothing to suggest, keep getting to know them; "ok" = you may suggest; "empty" = nothing matches, say so and offer to loosen one specific thing; "error" = the movie database is having trouble, say so briefly.
+- "notices" are things that happened behind the scenes this turn; weave them in naturally if relevant (for example a title you couldn't find).
+- If the conversation is empty, open warmly and invite them to say what they feel like watching, without a long introduction. If the person was silent ("(silence)"), gently check they're still there.
+
+Reply with ONLY a JSON object: {"say": "<what you say aloud>", "recommend": <candidate id, or null>}`;
+
+export interface Reply {
+  say: string;
+  movieId?: number;
+}
+
+/** One LLM call: conversation + state + real TMDB candidates → what to say (and which candidate, if any). */
+export async function respond(llm: LlmClient, is: InformationState): Promise<Reply> {
+  // Taste = a mood/genre, a movie they like, or a vibe. Time/year limits and dislikes alone are not enough to suggest anything.
+  const hasTaste = is.prefs.genres.length > 0 || is.prefs.seeds.length > 0 || is.vibe.length > 0;
+  const pool = hasTaste ? is.candidates.slice(0, POOL_SHOWN) : [];
+  const status =
+    is.search.status === "failed"
+      ? "error"
+      : !hasSignal(is) || !hasTaste
+        ? "none_yet"
+        : pool.length
+          ? "ok"
+          : "empty";
+
+  const messages = [
+    { role: "system" as const, content: SYSTEM },
+    {
+      role: "user" as const,
+      content: JSON.stringify({
+        conversation: is.history.slice(-12),
+        whatWeKnow: stateSummary(is),
+        alreadySuggested: is.recommended.map((m) => m.title),
+        candidatePool: status,
+        candidates: pool.map((m) => ({
+          id: m.id,
+          title: m.title,
+          year: m.year,
+          genres: m.genres,
+          rating: m.rating,
+          runtimeMinutes: m.runtime,
+          description: m.overview.slice(0, 220),
+        })),
+        notices: is.private.notices,
+      }),
+    },
+  ];
+
+  // If the LLM suggests something outside the candidates it is probably naming an invented movie: ask once more.
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const out: any = await llm.json(messages, { temperature: 0.7, maxTokens: 1200 });
+    const say = typeof out?.say === "string" ? out.say.trim().slice(0, 700) : "";
+    if (!say) throw new Error("LLM returned no 'say'");
+    const id = typeof out?.recommend === "number" ? out.recommend : undefined;
+    if (id !== undefined && !pool.some((m) => m.id === id)) {
+      console.warn(`[respond] LLM recommended id ${id}, which is not a candidate; retrying`);
+      continue;
+    }
+    return { say, movieId: id };
+  }
+  throw new Error("LLM kept recommending a movie outside the candidates");
+}
