@@ -85,18 +85,83 @@ const update = (is: IS, f: (s: IS) => IS): IS => {
   return queryKey(next) !== queryKey(is) ? markDirty(next) : next;
 };
 
-/** Drop recommended/rejected/disliked movies, then order by genre overlap with prefs (stable). */
+/** Weights sum to 1. Keep the factors separate so they can be tuned safely. */
+export const RANK_WEIGHTS = {
+  genres: 0.40,
+  similarity: 0.30,
+  rating: 0.20,
+  runtime: 0.10,
+} as const;
+
+/** Ignore common description words so similarity reflects the plot, not filler. */
+const STOP_WORDS = new Set(
+  "a an and are as at be by for from has have he her his in into is it its of on or she that the their them there they this to was were who with you your".split(" ")
+);
+const words = (text: string): Set<string> =>
+  new Set((text.toLowerCase().match(/[a-z]{3,}/g) ?? []).filter((w) => !STOP_WORDS.has(w)));
+
+/** Jaccard similarity: shared terms divided by distinct terms (0..1). */
+function overlap<T>(a: Set<T>, b: Set<T>): number {
+  if (!a.size || !b.size) return 0;
+  let shared = 0;
+  for (const x of a) if (b.has(x)) shared++;
+  return shared / (a.size + b.size - shared);
+}
+
+/** Soft runtime fit; hard runtime restrictions are handled by TMDB discovery. */
+function runtimeFit(is: IS, movie: Movie): number {
+  if (!movie.runtime || movie.runtime <= 0) return 0.5; // unknown: neutral
+  const { min, max } = is.constraints.runtime;
+  if (min !== undefined && movie.runtime < min) return 0;
+  if (max !== undefined && movie.runtime > max) return 0;
+  if (min !== undefined && max !== undefined) {
+    const midpoint = (min + max) / 2;
+    return Math.max(0, 1 - Math.abs(movie.runtime - midpoint) / Math.max(30, (max - min) / 2));
+  }
+  if (max !== undefined) return Math.min(1, Math.max(0, (max - movie.runtime) / 60 + 0.5));
+  if (min !== undefined) return Math.min(1, Math.max(0, (movie.runtime - min) / 60 + 0.5));
+  return 0.5; // no expressed runtime preference: neutral
+}
+
+/** Return a transparent 0..1 score for each factor and the weighted total. */
+export function movieScore(is: IS, movie: Movie) {
+  const preferred = new Set(is.prefs.genres);
+  const genres = preferred.size
+    ? [...preferred].filter((g) => movie.genres.includes(g)).length / preferred.size
+    : 0;
+
+  const similarity = is.prefs.seeds.length
+    ? Math.max(...is.prefs.seeds.map((seed) =>
+        0.6 * overlap(new Set(movie.genres), new Set(seed.genres)) +
+        0.4 * overlap(words(movie.overview), words(seed.overview))
+      ))
+    : 0;
+
+  // Bayesian shrinkage: a 9/10 with 3 votes shouldn't outrank an 8/10 with 10,000 votes.
+  const votes = Math.max(0, movie.votes || 0);
+  const rating = Math.max(0, Math.min(1,
+    ((votes * (movie.rating || 0) + 250 * 6.5) / (votes + 250)) / 10
+  ));
+  const runtime = runtimeFit(is, movie);
+  const total =
+    RANK_WEIGHTS.genres * genres +
+    RANK_WEIGHTS.similarity * similarity +
+    RANK_WEIGHTS.rating * rating +
+    RANK_WEIGHTS.runtime * runtime;
+  return { total, genres, similarity, rating, runtime };
+}
+
+/** Exclude ineligible movies, then sort by weighted score (stable on ties). */
 export function rank(is: IS, movies: Movie[]): Movie[] {
   const out = new Set([
     ...is.recommended.map((m) => m.id),
     ...is.rejected.map((r) => r.id),
+    ...is.prefs.seeds.map((m) => m.id), // don't recommend a movie used as an example
   ]);
-  const score = (m: Movie) =>
-    m.genres.filter((g) => is.prefs.genres.includes(g)).length;
   return movies
     .filter((m) => !out.has(m.id))
     .filter((m) => !m.genres.some((g) => is.dislikes.genres.includes(g)))
-    .map((m, i) => ({ m, i, s: score(m) }))
+    .map((m, i) => ({ m, i, s: movieScore(is, m).total }))
     .sort((a, b) => b.s - a.s || a.i - b.i)
     .map((x) => x.m);
 }
