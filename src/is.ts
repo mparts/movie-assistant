@@ -5,6 +5,7 @@ export const initialIS = (): InformationState => ({
   private: { agenda: [], notices: [] },
   shared: {},
   history: [],
+  readiness: { meaningfulTurns: 0, evidence: [] },
   prefs: { genres: [], seeds: [] },
   vibe: [],
   constraints: { runtime: {}, year: {} },

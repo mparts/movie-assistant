@@ -57,6 +57,8 @@ export interface InformationState {
   };
   shared: { lu?: { speaker: Speaker; moves: Move[] } };
   history: Turn[];
+  /** Recommendation gate: substantive user turns and distinct pieces of information. */
+  readiness: { meaningfulTurns: number; evidence: string[] };
 
   /** soft: used for ranking */
   prefs: { genres: string[]; seeds: Movie[] };

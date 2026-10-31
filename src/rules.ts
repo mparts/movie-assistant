@@ -1,3 +1,4 @@
+import { evidenceFromMoves } from "./readiness";
 import {
   Action,
   InformationState as IS,
@@ -356,6 +357,15 @@ export const rules: Rules = {
       ...is,
       shared: { ...is.shared, lu: { moves, speaker } },
       history: text ? [...is.history, { speaker, text }] : is.history,
+      readiness: (() => {
+        if (speaker !== "usr") return is.readiness;
+        const evidence = evidenceFromMoves(moves);
+        if (!evidence.length) return is.readiness;
+        return {
+          meaningfulTurns: is.readiness.meaningfulTurns + 1,
+          evidence: [...new Set([...is.readiness.evidence, ...evidence])],
+        };
+      })(),
     };
   },
 
