@@ -109,6 +109,7 @@ export interface TotalInformationState {
 }
 
 export interface DMContext extends TotalInformationState {
+  embedder?: import("./embeddings").Embedder;
   ssRef: any;
   tmdb: TmdbClient;
   llm: LlmClient;
@@ -116,6 +117,7 @@ export interface DMContext extends TotalInformationState {
 }
 
 export interface DMEContext extends TotalInformationState {
+  embedder?: import("./embeddings").Embedder;
   parentRef: any;
   tmdb: TmdbClient;
   llm: LlmClient;

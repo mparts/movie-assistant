@@ -1,5 +1,6 @@
 import { createLlm, Backend } from "./llm";
 import { createTmdb } from "./tmdb";
+import { createOllamaEmbedder } from "./embeddings";
 
 /**
  * Browser wiring. Keys never reach the browser: the Vite dev server (vite.config.ts)
@@ -25,3 +26,8 @@ if (import.meta.env.VITE_OLLAMA_MODEL) {
 }
 
 export const llm = createLlm(backends);
+
+/** Optional: Vite must proxy /ollama/api/embed to Ollama. */
+export const embedder = import.meta.env.OLLAMA_EMBED_MODEL
+  ? createOllamaEmbedder({ url: import.meta.env.OLLAMA_EMBED_URL, model: import.meta.env.OLLAMA_EMBED_MODEL })
+  : undefined;

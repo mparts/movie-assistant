@@ -49,6 +49,7 @@ export const hasSignal = (is: IS): boolean => {
   return (
     is.prefs.genres.length > 0 ||
     is.prefs.seeds.length > 0 ||
+    is.vibe.length > 0 ||
     is.dislikes.genres.length > 0 ||
     c.runtime.min !== undefined ||
     c.runtime.max !== undefined ||
@@ -165,6 +166,21 @@ export function rank(is: IS, movies: Movie[]): Movie[] {
     .map((m, i) => ({ m, i, s: movieScore(is, m).total }))
     .sort((a, b) => b.s - a.s || a.i - b.i)
     .map((x) => x.m);
+}
+
+/** Semantic reranking preserves the existing eligibility filters and weighted baseline. */
+export function rankWithSemantics(is: IS, movies: Movie[], semantic: Map<number, number>): Movie[] {
+  const eligible = rank(is, movies);
+  const vals = eligible.flatMap((m) => (semantic.has(m.id) ? [semantic.get(m.id)!] : []));
+  if (!vals.length) return eligible;
+  // Raw cosine scores cluster in a narrow band; stretch them over 0..1 so they can actually reorder candidates.
+  const lo = Math.min(...vals), hi = Math.max(...vals);
+  const norm = (v: number) => (hi > lo ? (v - lo) / (hi - lo) : 0.5);
+  return eligible.map((movie, index) => ({
+    movie, index,
+    score: 0.55 * (semantic.has(movie.id) ? norm(semantic.get(movie.id)!) : 0) + // missing overview: no invented match
+           0.45 * movieScore(is, movie).total,
+  })).sort((a, b) => b.score - a.score || a.index - b.index).map((x) => x.movie);
 }
 
 function findMovie(is: IS, title?: string): Movie | undefined {
@@ -430,14 +446,15 @@ export const rules: Rules = {
     if (ms.length) return () => update(is, (s) => ms.reduce((a, m) => retract(a, m.slot), s));
   },
 
-  /** Loose taste ("cozy", "makes me think"): remembered, matched against descriptions by the LLM. No new search. */
+  /** Loose taste ("cozy", "makes me think"): remembered, ranked against descriptions semantically. */
   integrate_vibe: ({ is }) => {
     const ms = usr(is, "vibe");
     if (!ms.length) return;
-    return () => ({
-      ...is,
-      vibe: addUnique(is.vibe, ms.map((m) => m.text.trim()).filter(Boolean)),
-    });
+    return () => {
+      const next = { ...is, vibe: addUnique(is.vibe, ms.map((m) => m.text.trim()).filter(Boolean)) };
+      // A vibe doesn't change the TMDB query, so if it is the first signal nothing has been searched yet.
+      return hasSignal(is) ? next : markDirty(next);
+    };
   },
 
   /** "Something like X": queue a TMDB lookup (done in dme.ts as an invoked actor). */
@@ -492,7 +509,9 @@ export const rules: Rules = {
 
   /** Keep candidates free of recommended/rejected/disliked movies. */
   filter_candidates: ({ is }) => {
-    const ranked = rank(is, is.candidates);
+    // filter only: re-sorting here would throw away the semantic order
+    const eligible = new Set(rank(is, is.candidates).map((m) => m.id));
+    const ranked = is.candidates.filter((m) => eligible.has(m.id));
     if (!sameIds(ranked, is.candidates)) return () => ({ ...is, candidates: ranked });
   },
 

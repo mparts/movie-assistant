@@ -4,7 +4,7 @@ import { createBrowserInspector } from "@statelyai/inspect";
 import { KEY } from "./azure";
 import { DMContext, DMEvent, NextMovesEvent } from "./types";
 import { nlg } from "./nlg";
-import { llm, tmdb } from "./services";
+import { llm, tmdb, embedder } from "./services";
 import { dme } from "./dme";
 import { initialIS } from "./is";
 
@@ -53,6 +53,7 @@ const dmMachine = setup({
       ssRef: spawn(speechstate, { input: settings }),
       tmdb,
       llm,
+      embedder,
       is: initialIS(),
     };
   },
@@ -142,6 +143,7 @@ const dmMachine = setup({
                 parentRef: self,
                 tmdb: context.tmdb,
                 llm: context.llm,
+                embedder: context.embedder,
                 is: context.is,
               };
             },

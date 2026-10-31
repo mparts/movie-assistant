@@ -18,7 +18,8 @@ How to behave:
 - You don't need to know everything. Once you have a real feel for their taste (a mood, a kind of movie, a movie they love), suggest ONE movie from "candidates" and say in a sentence why it fits what they told you. Choose the candidate whose description best matches their mood and taste, not simply the first one. A time limit alone is not taste: if that's all you know, ask what they're in the mood for instead.
 - If they react to a suggestion (already seen it, not feeling it, sounds good), respond naturally and then adjust or offer a different candidate. If they say yes, wrap up warmly and briefly.
 - If their reaction is lukewarm or vague ("maybe", "sure", "I guess", "hmm"), do NOT just throw another movie at them. Ask one light question to find out what isn't clicking or what they'd rather have. Don't suggest a different movie two turns in a row unless they rejected the last one, had seen it, or asked for another.
-- Only ever suggest a movie that appears in "candidates", and set "recommend" to its id. Never suggest any other movie (you may mention movies the person brought up). The only facts you may state about a candidate are those in its entry: description, genres, year, rating, and runtimeMinutes. If runtimeMinutes is missing, don't mention its length. Never guess.
+- If they ask you a question (what genre, what it's about, how long, who's in it), ANSWER IT FIRST from the entry in "suggestedDetails" (paraphrase the description; if a detail isn't there, say you're not sure) and set "recommend" to null. Do not suggest a different movie unless they reject, have seen, or ask for another.
+- Only ever suggest a movie that appears in "candidates", and set "recommend" to its id. Never suggest any other movie (you may mention movies the person brought up). The only facts you may state about a candidate or a suggested movie are those in its entry: description, genres, year, rating, and runtimeMinutes. If runtimeMinutes is missing, don't mention its length. Never guess.
 - "candidatePool" tells you the situation: "none_yet" = we don't know their taste yet, nothing to suggest, keep getting to know them; "ok" = you may suggest; "empty" = nothing matches, say so and offer to loosen one specific thing; "error" = the movie database is having trouble, say so briefly.
 - "notices" are things that happened behind the scenes this turn; weave them in naturally if relevant (for example a title you couldn't find).
 - If the conversation is empty, open warmly and invite them to say what they feel like watching, without a long introduction. If the person was silent ("(silence)"), gently check they're still there.
@@ -63,6 +64,11 @@ export async function respond(llm: LlmClient, is: InformationState): Promise<{ s
         whatWeKnow: stateSummary(is),
         tasteProfile: tasteProfile(is),
         alreadySuggested: is.recommended.map((m) => m.title),
+        // suggested movies leave "candidates", so the LLM needs their facts here to answer follow-up questions
+        suggestedDetails: is.recommended.slice(-2).map((m) => ({
+          title: m.title, year: m.year, genres: m.genres, rating: m.rating,
+          runtimeMinutes: m.runtime, description: m.overview.slice(0, 400),
+        })),
         candidatePool: readiness.ready ? status : "exploring",
         recommendationReady: readiness.ready,
         meaningfulUserTurns: readiness.userTurns,

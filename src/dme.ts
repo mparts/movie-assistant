@@ -1,25 +1,9 @@
 import { setup, assign, sendTo, fromPromise, AnyTransitionConfig } from "xstate";
-import {
-  rules,
-  applyFailure,
-  applyResults,
-  applySeed,
-  criteriaFromIS,
-  hasSignal,
-} from "./rules";
+import {rules, applyFailure, applyResults, applySeed, criteriaFromIS, hasSignal, rankWithSemantics,} from "./rules";
 import { understand } from "./nlu";
+import { tasteProfile } from "./taste-profile";
 import { respond } from "./respond";
-import {
-  DMEContext,
-  DMEEvent,
-  InformationState,
-  LlmClient,
-  Move,
-  Movie,
-  SaysMovesEvent,
-  SearchCriteria,
-  TmdbClient,
-} from "./types";
+import {DMEContext, DMEEvent, InformationState, LlmClient, Move, Movie, SaysMovesEvent, SearchCriteria, TmdbClient,} from "./types";
 
 /** Set `globalThis.DME_DEBUG = true` (or env DEBUG in node) to dump the full information state. */
 const DEBUG = () => !!(globalThis as any).DME_DEBUG || !!(globalThis as any).process?.env?.DEBUG;
@@ -66,6 +50,12 @@ export const dme = setup({
     latestSpeakerIsSys: ({ context }) => context.latest_speaker == "sys",
     seedPending: ({ context }) =>
       context.is.private.agenda.some((a) => a.type === "resolve_seed"),
+    canSemanticRank: ({ context }) =>
+      // genres alone are already handled by TMDB + the weighted score; embed only when there's a vibe or a liked movie
+      !!context.embedder && (context.is.vibe.length > 0 || context.is.prefs.seeds.length > 0) &&
+      !!tasteProfile(context.is) && context.is.candidates.length > 0 &&
+      context.latest_speaker === "usr" &&
+      context.is.history[context.is.history.length - 1]?.text !== "(silence)",
     needSearch: ({ context }) =>
       context.is.search.status === "dirty" && hasSignal(context.is),
   },
@@ -100,6 +90,11 @@ export const dme = setup({
       async ({ input }: { input: { llm: LlmClient; is: InformationState } }) =>
         respond(input.llm, input.is)
     ),
+    semanticRank: fromPromise(async ({ input }: { input: {
+      embedder: NonNullable<DMEContext["embedder"]>;
+      profile: string;
+      movies: Movie[];
+    } }) => input.embedder.score(input.profile, input.movies)),
     /** TMDB title lookup for "something like X". */
     resolveSeed: fromPromise(
       async ({ input }: { input: { tmdb: TmdbClient; title: string } }) =>
@@ -301,7 +296,36 @@ export const dme = setup({
             },
             Done: { type: "final" },
           },
-          onDone: "Done",
+          onDone: "SemanticGate",
+        },
+        SemanticGate: {
+          always: [
+            { guard: "canSemanticRank", target: "SemanticRank" },
+            { target: "Done" },
+          ],
+        },
+        SemanticRank: {
+          invoke: {
+            src: "semanticRank",
+            input: ({ context }) => ({
+              embedder: context.embedder!,
+              profile: tasteProfile(context.is)!,
+              movies: context.is.candidates,
+            }),
+            onDone: {
+              target: "Done",
+              actions: assign(({ context, event }) => ({
+                is: {
+                  ...context.is,
+                  candidates: rankWithSemantics(context.is, context.is.candidates, event.output as Map<number, number>),
+                },
+              })),
+            },
+            onError: {
+              target: "Done",
+              actions: ({ event }) => console.warn("[semantic ranking unavailable; keeping weighted order]", event.error),
+            },
+          },
         },
         Done: { type: "final" },
       },
