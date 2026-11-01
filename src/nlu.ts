@@ -97,7 +97,7 @@ export async function understand(
         }),
       },
     ],
-    { temperature: 0, maxTokens: 800 }
+    { temperature: 0, maxTokens: 800, prefer: "ollama" } // extraction is fine on a small local model; saves Groq tokens for Jake
   );
   const raw: unknown[] = Array.isArray(out?.moves) ? out.moves : [];
   return raw.map(clean).filter((m): m is Move => m !== null);

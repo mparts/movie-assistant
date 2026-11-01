@@ -73,6 +73,9 @@ export interface InformationState {
   recommended: Movie[]; // in order shown; last = focus
   rejected: { id: number; reason: "seen" | "no" }[];
 
+  /** consecutive system turns that recommended a movie; reset by any turn that didn't */
+  recommendStreak: number;
+
   search: { status: "idle" | "dirty" | "failed"; page: number; noMore: boolean };
 }
 
@@ -97,7 +100,7 @@ export interface LlmClient {
   /** One chat completion that must return a JSON object; rejects on failure. */
   json(
     messages: ChatMessage[],
-    opts?: { temperature?: number; maxTokens?: number }
+    opts?: { temperature?: number; maxTokens?: number; prefer?: string }
   ): Promise<unknown>;
 }
 

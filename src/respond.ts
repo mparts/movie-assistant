@@ -6,10 +6,16 @@ import { tasteProfile } from "./taste-profile";
 
 /** How many candidates the LLM sees (best-ranked first). */
 export const POOL_SHOWN = 8;
+/** After this many recommendations in a row, stop suggesting and ask what is missing. */
+export const MAX_RECOMMEND_STREAK = 2;
 export const OPENING_MESSAGE  = "Hey! I’m Jake, your movie companion. How are you feeling today?";
 export const NO_INPUT_MESSAGE = "Still there? Take your time — what are you thinking?";
 
 const SYSTEM = `You are Jake, a warm, easygoing friend who knows movies well, talking out loud with someone to help them decide what to watch tonight. Everything you write is spoken aloud: use 1 to 3 short, natural sentences. No lists, no markdown, no emojis, no stage directions.
+
+Voice: dry, warm, casual, like a friend texting. Vary your openers; never start with "Wow", "Great", "Awesome" or an echo of their words; at most one exclamation mark; no emojis.
+Example: "Ha, fair. Something that won't make you think too hard, then. Are you more in a laughing mood or a cozy one?"
+Example: "That one's a slow burn, but it's got a great creepy streak. Does that sound like your kind of night?"
 
 How to behave:
 - Have a real conversation. React to what they just said first. Be curious about them, not about a checklist.
@@ -42,7 +48,9 @@ export async function respond(llm: LlmClient, is: InformationState): Promise<{ s
   const hasTaste = is.prefs.genres.length > 0 || is.prefs.seeds.length > 0 || is.vibe.length > 0;
   const readiness = recommendationReadiness(is);
   // Withhold candidates until the readiness gate is satisfied; the LLM cannot pick one early.
-  const pool = readiness.ready ? is.candidates.slice(0, POOL_SHOWN) : [];
+  const clarifying = readiness.ready && is.recommendStreak >= MAX_RECOMMEND_STREAK;
+  const canRecommend = readiness.ready && !clarifying;
+  const pool = canRecommend ? is.candidates.slice(0, POOL_SHOWN) : [];
   const status =
     is.search.status === "failed"
       ? "error"
@@ -54,8 +62,10 @@ export async function respond(llm: LlmClient, is: InformationState): Promise<{ s
 
   const messages = [
 
-    { role: "system" as const, content: SYSTEM + (readiness.ready
+    { role: "system" as const, content: SYSTEM + (canRecommend
       ? "\nThe conversation is ready for a recommendation. You may choose a candidate if appropriate."
+      : clarifying
+      ? "\nCLARIFY MODE: You have just suggested two movies in a row, so do NOT suggest, name, or hint at any movie now. Briefly acknowledge what they said, then ask exactly ONE question to find out what is missing. Prefer offering to drop or loosen one specific thing from whatWeKnow (one of the wantedGenres, the runtime limit, or the year range), or ask what they would change about the last suggestions. Output recommend:null."
       : "\nEXPLORATION MODE: Do not recommend, name, or hint at any specific movie. Respond empathetically to the latest user message, then ask exactly one insightful, natural follow-up question about their desired experience, preferences, or constraints. Avoid repeating an earlier question. The candidate list is intentionally unavailable. Output recommend:null." ) },
     {
       role: "user" as const,
@@ -65,12 +75,12 @@ export async function respond(llm: LlmClient, is: InformationState): Promise<{ s
         tasteProfile: tasteProfile(is),
         alreadySuggested: is.recommended.map((m) => m.title),
         // suggested movies leave "candidates", so the LLM needs their facts here to answer follow-up questions
-        suggestedDetails: is.recommended.slice(-2).map((m) => ({
+        suggestedDetails: is.recommended.slice(-5).map((m) => ({
           title: m.title, year: m.year, genres: m.genres, rating: m.rating,
           runtimeMinutes: m.runtime, description: m.overview.slice(0, 400),
         })),
-        candidatePool: readiness.ready ? status : "exploring",
-        recommendationReady: readiness.ready,
+        candidatePool: canRecommend ? status : "exploring",
+        recommendationReady: canRecommend,
         meaningfulUserTurns: readiness.userTurns,
         distinctPreferenceSignals: readiness.distinctSignals,
         candidates: pool.map((m) => ({
@@ -97,10 +107,11 @@ export async function respond(llm: LlmClient, is: InformationState): Promise<{ s
       console.warn(`[respond] LLM recommended id ${id}, which is not a candidate; retrying`);
       continue;
     }
-    if (!readiness.ready) {
+    if (!canRecommend) {
       // A model may ignore the instruction and mention a movie in the spoken text.
       // Reject obvious title mentions rather than trusting recommend:null alone.
-      const knownTitles = [...is.candidates, ...is.recommended].map((m) => m.title)
+      // (When clarifying, referring back to the movies already suggested is fine.)
+      const knownTitles = (clarifying ? is.candidates : [...is.candidates, ...is.recommended]).map((m) => m.title)
         .filter((title) => title.length >= 4);
       if (id !== undefined || knownTitles.some((title) => say.toLowerCase().includes(title.toLowerCase()))) {
         console.warn("[respond] Premature recommendation blocked; retrying");
@@ -109,6 +120,9 @@ export async function respond(llm: LlmClient, is: InformationState): Promise<{ s
       return { say };
     }
     return { say, movieId: id };
+  }
+  if (clarifying) {
+    return { say: "Neither of those quite landed. What would you change about them?" };
   }
   if (!readiness.ready) {
     return { say: "What kind of feeling would you like the movie to leave you with?" };

@@ -14,7 +14,11 @@ export function createLlm(backends: Backend[]): LlmClient {
   return {
     async json(messages, opts) {
       let lastError: unknown;
-      for (const b of backends) {
+      // `prefer` moves one backend (by name) to the front for this call; the others keep their order as fallbacks.
+      const ordered = opts?.prefer
+        ? [...backends].sort((a, b) => Number(b.name === opts.prefer) - Number(a.name === opts.prefer))
+        : backends;
+      for (const b of ordered) {
         try {
           return await call(b, messages, opts);
         } catch (e) {
@@ -43,7 +47,7 @@ async function call(
       response_format: { type: "json_object" },
     };
     // gpt-oss models "think" before answering; keep it short, this is a spoken conversation.
-    if (b.model.startsWith("openai/gpt-oss")) body.reasoning_effort = "low";
+    if (/gpt-oss/.test(b.model)) body.reasoning_effort = "low";
 
     const res = await fetch(`${b.baseUrl}/chat/completions`, {
       method: "POST",

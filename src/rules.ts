@@ -373,6 +373,10 @@ export const rules: Rules = {
       ...is,
       shared: { ...is.shared, lu: { moves, speaker } },
       history: text ? [...is.history, { speaker, text }] : is.history,
+      recommendStreak:
+        speaker !== "sys"
+          ? is.recommendStreak
+          : moves.some((m) => m.type === "say" && m.movieId !== undefined) ? is.recommendStreak + 1 : 0,
       readiness: (() => {
         if (speaker !== "usr") return is.readiness;
         const evidence = evidenceFromMoves(moves);

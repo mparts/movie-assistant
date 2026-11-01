@@ -1,8 +1,7 @@
 import { defineConfig, loadEnv } from "vite";
 
-// Dev-server proxy: adds API credentials server-side so they never end up in the browser bundle.
 export default defineConfig(({ mode }) => {
-  const env = loadEnv(mode, process.cwd(), ""); // reads .env.local (gitignored)
+  const env = loadEnv(mode, process.cwd(), "");
   return {
     server: {
       proxy: {
@@ -18,10 +17,17 @@ export default defineConfig(({ mode }) => {
           rewrite: (p: string) => p.replace(/^\/groq/, ""),
           headers: { Authorization: `Bearer ${env.GROQ_API_KEY}` },
         },
+        // LOCAL Ollama: embeddings (/ollama/api/embed)
         "/ollama": {
           target: "http://localhost:11434",
           changeOrigin: true,
           rewrite: (p: string) => p.replace(/^\/ollama/, ""),
+        },
+        // TUNNELLED university Ollama: the LLM (/ollama-llm/v1/...). Tunnel: ssh -f -N -L 11435:127.0.0.1:11434 mltgpu-2
+        "/ollama-llm": {
+          target: "http://localhost:11435",
+          changeOrigin: true,
+          rewrite: (p: string) => p.replace(/^\/ollama-llm/, ""),
         },
       },
     },

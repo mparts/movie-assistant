@@ -13,5 +13,6 @@ export const initialIS = (): InformationState => ({
   candidates: [],
   recommended: [],
   rejected: [],
+  recommendStreak: 0,
   search: { status: "idle", page: 1, noMore: false },
 });

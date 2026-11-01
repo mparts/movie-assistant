@@ -19,15 +19,18 @@ const backends: Backend[] = [
 if (import.meta.env.VITE_OLLAMA_MODEL) {
   backends.push({
     name: "ollama",
-    baseUrl: "/ollama/v1",
+    baseUrl: "/ollama-llm/v1", // Vite proxy → the tunnelled university server (see vite.config.ts)
     model: import.meta.env.VITE_OLLAMA_MODEL,
     timeoutMs: 30000,
   });
 }
 
+// VITE_LLM_PRIMARY=ollama puts Ollama first (Groq becomes the fallback).
+if (import.meta.env.VITE_LLM_PRIMARY === "ollama") backends.reverse();
+
 export const llm = createLlm(backends);
 
 /** Optional: Vite must proxy /ollama/api/embed to Ollama. */
-export const embedder = import.meta.env.OLLAMA_EMBED_MODEL
-  ? createOllamaEmbedder({ url: import.meta.env.OLLAMA_EMBED_URL, model: import.meta.env.OLLAMA_EMBED_MODEL })
+export const embedder = import.meta.env.VITE_OLLAMA_EMBED_MODEL
+  ? createOllamaEmbedder({ url: "/ollama/api/embed", model: import.meta.env.VITE_OLLAMA_EMBED_MODEL })
   : undefined;

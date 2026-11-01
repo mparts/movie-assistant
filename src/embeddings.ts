@@ -31,7 +31,7 @@ export function createOllamaEmbedder(options: {
   const qPrefix = nomic ? "search_query: " : "";
   const dPrefix = nomic ? "search_document: " : "";
   const cache = new Map<string, number[]>();
-  const batchSize = Math.max(1, options.batchSize ?? 16);
+  const batchSize = Math.max(1, options.batchSize ?? 64);
 
   async function embed(texts: string[]): Promise<number[][]> {
     const controller = new AbortController();
@@ -82,4 +82,3 @@ export function createOllamaEmbedder(options: {
     },
   };
 }
-

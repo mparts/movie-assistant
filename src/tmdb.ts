@@ -4,6 +4,19 @@ export interface TmdbOptions {
   /** "/tmdb" in the browser (Vite proxy adds the token); "https://api.themoviedb.org/3" in node. */
   baseUrl: string;
   headers?: Record<string, string>;
+  /** TMDB pages fetched per search batch (20 movies each). */
+  pagesPerSearch?: number;
+  /** Pages of popularity-sorted results the session may draw from, in a per-session random order. */
+  pageWindow?: number;
+}
+
+function shuffle<T>(xs: T[]): T[] {
+  const a = [...xs];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
 }
 
 type GenreMaps = { byName: Map<string, number>; byId: Map<number, string> };
@@ -35,7 +48,12 @@ export function buildDiscoverParams(
   return p;
 }
 
-export function createTmdb({ baseUrl, headers }: TmdbOptions): TmdbClient {
+export function createTmdb({ baseUrl, headers, pagesPerSearch = 3, pageWindow = 12 }: TmdbOptions): TmdbClient {
+  // Popularity-sorted discover always returns the same top titles. A random page order per session
+  // (fixed for the session, so repeated searches stay consistent) varies the pool between conversations.
+  const pageOrder = shuffle(Array.from({ length: pageWindow }, (_, i) => i + 1));
+  const runtimes = new Map<number, number>();
+
   const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
   async function get(path: string, params: Record<string, string> = {}): Promise<any> {
@@ -79,19 +97,40 @@ export function createTmdb({ baseUrl, headers }: TmdbOptions): TmdbClient {
   return {
     async discover(criteria) {
       const g = await loadGenres();
-      const data = await get("/discover/movie", buildDiscoverParams(criteria, g.byName));
-      const movies = (data.results as any[]).map((r) => toMovie(r, g.byId));
-      // Discover results carry no runtime; look each one up (in parallel) so the assistant never has to guess.
+      const params = buildDiscoverParams(criteria, g.byName);
+      // Page 1 doubles as a probe: it tells us how many pages this query really has.
+      const probe = await get("/discover/movie", { ...params, page: "1" });
+      const available = Math.min(probe.total_pages ?? 1, pageWindow);
+      const start = (criteria.page - 1) * pagesPerSearch;
+      const pages = pageOrder.filter((p) => p <= available).slice(start, start + pagesPerSearch);
+      const responses = await Promise.all(
+        pages.map((p) => (p === 1 ? probe : get("/discover/movie", { ...params, page: String(p) })))
+      );
+      const seen = new Set<number>();
+      const movies = responses
+        .flatMap((d) => d.results as any[])
+        .map((r) => toMovie(r, g.byId))
+        .filter((m) => !seen.has(m.id) && !!seen.add(m.id));
+      // Discover results carry no runtime; look them up (10 at a time, cached) so the assistant never has to guess.
+      const todo = movies.filter((m) => !runtimes.has(m.id));
+      let next = 0;
       await Promise.all(
-        movies.map(async (m) => {
-          try {
-            const d = await get(`/movie/${m.id}`, { language: "en-US" });
-            if (typeof d.runtime === "number" && d.runtime > 0) m.runtime = d.runtime;
-          } catch {
-            /* runtime stays unknown */
+        Array.from({ length: Math.min(10, todo.length) }, async () => {
+          while (next < todo.length) {
+            const m = todo[next++];
+            try {
+              const d = await get(`/movie/${m.id}`, { language: "en-US" });
+              if (typeof d.runtime === "number" && d.runtime > 0) runtimes.set(m.id, d.runtime);
+            } catch {
+              /* runtime stays unknown */
+            }
           }
         })
       );
+      movies.forEach((m) => {
+        const r = runtimes.get(m.id);
+        if (r) m.runtime = r;
+      });
       return movies;
     },
     async searchMovie(title) {
