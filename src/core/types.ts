@@ -1,4 +1,5 @@
 import { SpeechStateExternalEvent } from "speechstate";
+import type { Embedder } from "../services/embeddings";
 
 /** A movie as the dialogue sees it. Genres are TMDB genre *names*; only the TMDB client knows ids. */
 export interface Movie {
@@ -42,6 +43,14 @@ export type Move =
   | { type: "noinput" }
   | { type: "say"; text: string; movieId?: number }; // system utterance (+ the movie it recommends)
 
+export type MoveOf<T extends Move["type"]> = Extract<Move, { type: T }>;
+
+/** What the system says in one turn. */
+export interface Reply {
+  say: string;
+  movieId?: number;
+}
+
 /** Pending internal work: look a title up in TMDB. */
 export type Action = { type: "resolve_seed"; title: string };
 
@@ -62,7 +71,7 @@ export interface InformationState {
 
   /** soft: used for ranking */
   prefs: { genres: string[]; seeds: Movie[] };
-  /** loose taste descriptors, matched against movie descriptions by the LLM */
+  /** loose taste descriptors, matched against movie descriptions semantically */
   vibe: string[];
   /** hard: sent to TMDB */
   constraints: { runtime: Range; year: Range; rating?: number; language?: string };
@@ -72,10 +81,10 @@ export interface InformationState {
   candidates: Movie[]; // filtered + ranked, best first
   recommended: Movie[]; // in order shown; last = focus
   rejected: { id: number; reason: "seen" | "no" }[];
-
   /** consecutive system turns that recommended a movie; reset by any turn that didn't */
   recommendStreak: number;
 
+  /** `page` counts batches of TMDB pages, not single pages. */
   search: { status: "idle" | "dirty" | "failed"; page: number; noMore: boolean };
 }
 
@@ -96,13 +105,19 @@ export interface TmdbClient {
 
 export type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
 
+export interface LlmOptions {
+  temperature?: number;
+  maxTokens?: number;
+  /** Name of the backend to try first for this call; the others stay as fallbacks. */
+  prefer?: string;
+}
+
 export interface LlmClient {
   /** One chat completion that must return a JSON object; rejects on failure. */
-  json(
-    messages: ChatMessage[],
-    opts?: { temperature?: number; maxTokens?: number; prefer?: string }
-  ): Promise<unknown>;
+  json(messages: ChatMessage[], opts?: LlmOptions): Promise<unknown>;
 }
+
+/* ---- dialogue manager (DME) and top-level machine contexts/events ---- */
 
 export interface TotalInformationState {
   latest_speaker?: Speaker;
@@ -111,25 +126,22 @@ export interface TotalInformationState {
   is: InformationState;
 }
 
+export interface DMEContext extends TotalInformationState {
+  embedder?: Embedder;
+  parentRef: any;
+  tmdb: TmdbClient;
+  llm: LlmClient;
+}
+
 export interface DMContext extends TotalInformationState {
-  embedder?: import("./embeddings").Embedder;
+  embedder?: Embedder;
   ssRef: any;
   tmdb: TmdbClient;
   llm: LlmClient;
   lastUtterance?: string;
 }
 
-export interface DMEContext extends TotalInformationState {
-  embedder?: import("./embeddings").Embedder;
-  parentRef: any;
-  tmdb: TmdbClient;
-  llm: LlmClient;
-}
-
-export type DMEvent =
-  | { type: "CLICK" }
-  | SpeechStateExternalEvent
-  | NextMovesEvent;
+export type DMEvent = { type: "CLICK" } | SpeechStateExternalEvent | NextMovesEvent;
 
 export type DMEEvent = SaysMovesEvent;
 

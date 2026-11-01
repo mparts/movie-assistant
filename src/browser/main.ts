@@ -1,4 +1,5 @@
-import { setupButton } from "./isu";
+import "./style.css";
+import { setupButton } from "./dm";
 
 document.querySelector("#app")!.innerHTML = `
   <div>

@@ -1,14 +1,19 @@
-import { Movie, SearchCriteria, TmdbClient } from "./types";
+import type { Movie, SearchCriteria, TmdbClient } from "../core/types";
 
 export interface TmdbOptions {
-  /** "/tmdb" in the browser (Vite proxy adds the token); "https://api.themoviedb.org/3" in node. */
   baseUrl: string;
   headers?: Record<string, string>;
-  /** TMDB pages fetched per search batch (20 movies each). */
-  pagesPerSearch?: number;
-  /** Pages of popularity-sorted results the session may draw from, in a per-session random order. */
-  pageWindow?: number;
+  language: string;
+  sortBy: string;
+  minVotes: number;
+  /** TMDB pages (20 movies each) fetched per search batch. */
+  pagesPerBatch: number;
+  /** Pages of results a session may draw from, in a per-session random order. */
+  pageWindow: number;
+  runtimeLookupConcurrency: number;
 }
+
+type DiscoverOptions = Pick<TmdbOptions, "language" | "sortBy" | "minVotes">;
 
 function shuffle<T>(xs: T[]): T[] {
   const a = [...xs];
@@ -19,20 +24,18 @@ function shuffle<T>(xs: T[]): T[] {
   return a;
 }
 
-type GenreMaps = { byName: Map<string, number>; byId: Map<number, string> };
-
 /** Pure: our criteria (genre NAMES) → TMDB /discover/movie query parameters. */
 export function buildDiscoverParams(
   c: SearchCriteria,
-  idByName: Map<string, number>
+  idByName: Map<string, number>,
+  o: DiscoverOptions
 ): Record<string, string> {
-  const ids = (names: string[]) =>
-    names.flatMap((n) => (idByName.has(n) ? [idByName.get(n)!] : []));
+  const ids = (names: string[]) => names.flatMap((n) => (idByName.has(n) ? [idByName.get(n)!] : []));
   const p: Record<string, string> = {
     include_adult: "false",
-    language: "en-US",
-    sort_by: "popularity.desc",
-    "vote_count.gte": "100", // keeps obscure titles out; tune
+    language: o.language,
+    sort_by: o.sortBy,
+    "vote_count.gte": String(o.minVotes),
     page: String(c.page),
   };
   const withIds = ids(c.genres);
@@ -48,18 +51,17 @@ export function buildDiscoverParams(
   return p;
 }
 
-export function createTmdb({ baseUrl, headers, pagesPerSearch = 3, pageWindow = 12 }: TmdbOptions): TmdbClient {
+export function createTmdb(o: TmdbOptions): TmdbClient {
   // Popularity-sorted discover always returns the same top titles. A random page order per session
   // (fixed for the session, so repeated searches stay consistent) varies the pool between conversations.
-  const pageOrder = shuffle(Array.from({ length: pageWindow }, (_, i) => i + 1));
+  const pageOrder = shuffle(Array.from({ length: o.pageWindow }, (_, i) => i + 1));
   const runtimes = new Map<number, number>();
-
   const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
   async function get(path: string, params: Record<string, string> = {}): Promise<any> {
-    const url = `${baseUrl}${path}?${new URLSearchParams(params)}`;
+    const url = `${o.baseUrl}${path}?${new URLSearchParams(params)}`;
     for (let attempt = 0; ; attempt++) {
-      const res = await fetch(url, { headers });
+      const res = await fetch(url, { headers: o.headers });
       if (res.status === 429 && attempt === 0) {
         await sleep(1000); // TMDB asks clients to respect 429
         continue;
@@ -69,9 +71,10 @@ export function createTmdb({ baseUrl, headers, pagesPerSearch = 3, pageWindow = 
     }
   }
 
+  type GenreMaps = { byName: Map<string, number>; byId: Map<number, string> };
   let genres: Promise<GenreMaps> | undefined;
-  const loadGenres = () => {
-    genres ??= get("/genre/movie/list", { language: "en" })
+  const loadGenres = () =>
+    (genres ??= get("/genre/movie/list", { language: "en" })
       .then((d) => ({
         byName: new Map<string, number>(d.genres.map((g: any) => [g.name, g.id])),
         byId: new Map<number, string>(d.genres.map((g: any) => [g.id, g.name])),
@@ -79,9 +82,7 @@ export function createTmdb({ baseUrl, headers, pagesPerSearch = 3, pageWindow = 
       .catch((e) => {
         genres = undefined; // retry next time
         throw e;
-      });
-    return genres;
-  };
+      }));
 
   const toMovie = (r: any, byId: Map<number, string>): Movie => ({
     id: r.id,
@@ -94,15 +95,38 @@ export function createTmdb({ baseUrl, headers, pagesPerSearch = 3, pageWindow = 
     posterPath: r.poster_path ?? undefined,
   });
 
+  /** Discover results carry no runtime; look them up (concurrently, cached) so the assistant never has to guess. */
+  async function fillRuntimes(movies: Movie[]) {
+    const todo = movies.filter((m) => !runtimes.has(m.id));
+    let next = 0;
+    await Promise.all(
+      Array.from({ length: Math.min(o.runtimeLookupConcurrency, todo.length) }, async () => {
+        while (next < todo.length) {
+          const m = todo[next++];
+          try {
+            const d = await get(`/movie/${m.id}`, { language: o.language });
+            if (typeof d.runtime === "number" && d.runtime > 0) runtimes.set(m.id, d.runtime);
+          } catch {
+            /* runtime stays unknown */
+          }
+        }
+      })
+    );
+    for (const m of movies) {
+      const r = runtimes.get(m.id);
+      if (r) m.runtime = r;
+    }
+  }
+
   return {
     async discover(criteria) {
       const g = await loadGenres();
-      const params = buildDiscoverParams(criteria, g.byName);
+      const params = buildDiscoverParams(criteria, g.byName, o);
       // Page 1 doubles as a probe: it tells us how many pages this query really has.
       const probe = await get("/discover/movie", { ...params, page: "1" });
-      const available = Math.min(probe.total_pages ?? 1, pageWindow);
-      const start = (criteria.page - 1) * pagesPerSearch;
-      const pages = pageOrder.filter((p) => p <= available).slice(start, start + pagesPerSearch);
+      const available = Math.min(probe.total_pages ?? 1, o.pageWindow);
+      const start = (criteria.page - 1) * o.pagesPerBatch;
+      const pages = pageOrder.filter((p) => p <= available).slice(start, start + o.pagesPerBatch);
       const responses = await Promise.all(
         pages.map((p) => (p === 1 ? probe : get("/discover/movie", { ...params, page: String(p) })))
       );
@@ -111,26 +135,7 @@ export function createTmdb({ baseUrl, headers, pagesPerSearch = 3, pageWindow = 
         .flatMap((d) => d.results as any[])
         .map((r) => toMovie(r, g.byId))
         .filter((m) => !seen.has(m.id) && !!seen.add(m.id));
-      // Discover results carry no runtime; look them up (10 at a time, cached) so the assistant never has to guess.
-      const todo = movies.filter((m) => !runtimes.has(m.id));
-      let next = 0;
-      await Promise.all(
-        Array.from({ length: Math.min(10, todo.length) }, async () => {
-          while (next < todo.length) {
-            const m = todo[next++];
-            try {
-              const d = await get(`/movie/${m.id}`, { language: "en-US" });
-              if (typeof d.runtime === "number" && d.runtime > 0) runtimes.set(m.id, d.runtime);
-            } catch {
-              /* runtime stays unknown */
-            }
-          }
-        })
-      );
-      movies.forEach((m) => {
-        const r = runtimes.get(m.id);
-        if (r) m.runtime = r;
-      });
+      await fillRuntimes(movies);
       return movies;
     },
     async searchMovie(title) {

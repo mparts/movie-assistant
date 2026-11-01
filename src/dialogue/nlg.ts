@@ -1,4 +1,4 @@
-import { Move } from "./types";
+import type { Move } from "../core/types";
 
 /** The LLM writes the wording; this only extracts what to speak. */
 export const nlg = (moves: Move[]): string =>

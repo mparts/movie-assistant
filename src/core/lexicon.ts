@@ -1,6 +1,5 @@
 /**
- * Deterministic language tables. Everything the system "knows" about moods,
- * aliases and adjustment steps lives here, visible and testable.
+ * Deterministic language tables: what the system "knows" about moods, genre aliases and languages.
  * Values are genre NAMES as TMDB spells them; ids come from TMDB at runtime.
  */
 
@@ -85,17 +84,3 @@ export function languageCode(text: string): string | undefined {
   if (LANGUAGES[t]) return LANGUAGES[t];
   return /^[a-z]{2}$/.test(t) ? t : undefined;
 }
-
-/** Step sizes for relative requests ("shorter", "newer", "better"). Placeholders to tune. */
-export const ADJUST = {
-  runtimeStep: 20,
-  runtimeDefaultMax: 130,
-  runtimeDefaultMin: 100,
-  runtimeFloor: 60,
-  yearStep: 10,
-  yearOlderStep: 15,
-  yearDefaultMin: 2000,
-  ratingStep: 0.5,
-  ratingDefault: 6.5,
-  ratingCap: 8.5,
-};

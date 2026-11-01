@@ -1,63 +1,86 @@
-import { setup, assign, sendTo, fromPromise, AnyTransitionConfig } from "xstate";
-import {rules, applyFailure, applyResults, applySeed, criteriaFromIS, hasSignal, rankWithSemantics,} from "./rules";
-import { understand } from "./nlu";
-import { tasteProfile } from "./taste-profile";
+/**
+ * Dialogue Manager Engine (xstate). One turn = Select (say something) → Update (hear + integrate + retrieve).
+ *   Select:  respond() → one `say` move, sent to the parent.
+ *   Update:  Init → Grounding (wait for SAYS) → Understand (LLM) → Integrate (rule chain)
+ *            → Retrieve (seed lookup / TMDB search loop) → SemanticRank (optional) → Done.
+ */
+import { AnyTransitionConfig, assign, fromPromise, sendTo, setup } from "xstate";
+import { notices, utterances } from "../config/prompts";
+import { settings } from "../config/settings";
+import { rankWithSemantics } from "../core/ranking";
+import { applyFailure, applyResults, applySeed, rules } from "../core/rules";
+import { criteriaFromIS, hasSignal, tasteProfile } from "../core/state";
+import type {
+  DMEContext, DMEEvent, InformationState, LlmClient, Move, Movie, Reply, SaysMovesEvent, SearchCriteria, TmdbClient,
+} from "../core/types";
+import { isDebug, last } from "../core/util";
 import { respond } from "./respond";
-import {DMEContext, DMEEvent, InformationState, LlmClient, Move, Movie, SaysMovesEvent, SearchCriteria, TmdbClient,} from "./types";
+import { understand } from "./nlu";
 
-/** Set `globalThis.DME_DEBUG = true` (or env DEBUG in node) to dump the full information state. */
-const DEBUG = () => !!(globalThis as any).DME_DEBUG || !!(globalThis as any).process?.env?.DEBUG;
+
 const logIS = (what: string, is: InformationState) => {
   console.info(`[ISU ${what}]`);
-  if (DEBUG()) console.dir(is, { depth: null, colors: true });
+  if (isDebug()) console.dir(is, { depth: null, colors: true });
 };
 
 /** Transition guarded by an ISU rule: the rule is both the precondition and the effect. */
-function isuTransition(nextState: string, ruleName: string): AnyTransitionConfig {
-  return {
-    target: nextState,
-    guard: { type: "isu", params: { name: ruleName } },
-    actions: [{ type: "isu", params: { name: ruleName } }],
-  };
-}
+const isuTransition = (target: string, rule: string): AnyTransitionConfig => ({
+  target,
+  guard: { type: "isu", params: { name: rule } },
+  actions: [{ type: "isu", params: { name: rule } }],
+});
 
 /** Optional rules in sequence: each fires if it applies, then we move on (several moves can arrive at once). */
-function ruleChain(ruleNames: string[]) {
-  const states: Record<string, AnyTransitionConfig | object> = {};
-  ruleNames.forEach((name, i) => {
-    const next = i + 1 < ruleNames.length ? ruleNames[i + 1] : "Done";
+function ruleChain(names: string[]) {
+  const states: Record<string, object> = {};
+  names.forEach((name, i) => {
+    const next = i + 1 < names.length ? names[i + 1] : "Done";
     states[name] = { always: [isuTransition(next, name), { target: next }] };
   });
   states.Done = { type: "final" };
-  return { initial: ruleNames[0], states } as any;
+  return { initial: names[0], states } as any;
 }
 
-const FALLBACK_SAY = "Sorry, I lost my train of thought for a second. Could you say that again?";
+/** Add a notice for the LLM to mention (what happened behind the scenes this turn). */
+const withNotice = (is: InformationState, text: string): InformationState => ({
+  ...is,
+  private: { ...is.private, notices: [...is.private.notices, text] },
+});
+
+const INTEGRATE_RULES = [
+  "integrate_retry_failed",
+  "integrate_restart",
+  "integrate_prefer",
+  "integrate_constrain",
+  "integrate_adjust",
+  "integrate_retract",
+  "integrate_vibe",
+  "integrate_like",
+  "integrate_seen_reject",
+  "integrate_recommend",
+  "filter_candidates",
+];
 
 export const dme = setup({
-  types: {} as {
-    input: DMEContext;
-    context: DMEContext;
-    events: DMEEvent;
-  },
+  types: {} as { input: DMEContext; context: DMEContext; events: DMEEvent },
   guards: {
     isu: ({ context }, params: { name: string }) => !!rules[params.name](context),
     isUserSpeech: ({ event }) => {
       const v = (event as SaysMovesEvent).value;
       return v.speaker === "usr" && !!v.text?.trim();
     },
-    latestSpeakerIsUsr: ({ context }) => context.latest_speaker == "usr",
-    latestSpeakerIsSys: ({ context }) => context.latest_speaker == "sys",
-    seedPending: ({ context }) =>
-      context.is.private.agenda.some((a) => a.type === "resolve_seed"),
-    canSemanticRank: ({ context }) =>
-      // genres alone are already handled by TMDB + the weighted score; embed only when there's a vibe or a liked movie
-      !!context.embedder && (context.is.vibe.length > 0 || context.is.prefs.seeds.length > 0) &&
-      !!tasteProfile(context.is) && context.is.candidates.length > 0 &&
-      context.latest_speaker === "usr" &&
-      context.is.history[context.is.history.length - 1]?.text !== "(silence)",
-    needSearch: ({ context }) =>
-      context.is.search.status === "dirty" && hasSignal(context.is),
+    latestSpeakerIsUsr: ({ context }) => context.latest_speaker === "usr",
+    latestSpeakerIsSys: ({ context }) => context.latest_speaker === "sys",
+    seedPending: ({ context }) => context.is.private.agenda.some((a) => a.type === "resolve_seed"),
+    // Genres alone are handled by TMDB + the weighted score; embed only with a vibe or a liked movie.
+    canSemanticRank: ({ context: c }) =>
+      !!c.embedder &&
+      (c.is.vibe.length > 0 || c.is.prefs.seeds.length > 0) &&
+      !!tasteProfile(c.is) &&
+      c.is.candidates.length > 0 &&
+      c.latest_speaker === "usr" &&
+      last(c.is.history)?.text !== settings.dialogue.silenceMarker,
+    needSearch: ({ context }) => context.is.search.status === "dirty" && hasSignal(context.is),
   },
   actions: {
     sendBackNextMoves: sendTo(
@@ -65,9 +88,9 @@ export const dme = setup({
       ({ context }) => ({ type: "NEXT_MOVES", value: context.is.next_moves })
     ),
     isu: assign(({ context }, params: { name: string }) => {
-      const newIS = rules[params.name](context)!(); // never called without its guard
-      logIS(params.name, newIS);
-      return { is: newIS };
+      const is = rules[params.name](context)!(); // never called without its guard
+      logIS(params.name, is);
+      return { is };
     }),
     updateLatestMoves: assign(({ context, event }) => {
       const v = (event as SaysMovesEvent).value;
@@ -81,29 +104,24 @@ export const dme = setup({
   },
   actors: {
     /** LLM: what did the user just express? (utterance → moves) */
-    understand: fromPromise(
-      async ({ input }: { input: { llm: LlmClient; text: string; is: InformationState } }) =>
-        understand(input.llm, input.text, input.is)
+    understand: fromPromise(async ({ input }: { input: { llm: LlmClient; text: string; is: InformationState } }) =>
+      understand(input.llm, input.text, input.is)
     ),
-    /** LLM: what do we say, and which TMDB candidate (if any) do we suggest? */
-    respond: fromPromise(
-      async ({ input }: { input: { llm: LlmClient; is: InformationState } }) =>
-        respond(input.llm, input.is)
+    /** LLM: what do we say, and which candidate (if any) do we suggest? */
+    respond: fromPromise(async ({ input }: { input: { llm: LlmClient; is: InformationState } }) =>
+      respond(input.llm, input.is)
     ),
-    semanticRank: fromPromise(async ({ input }: { input: {
-      embedder: NonNullable<DMEContext["embedder"]>;
-      profile: string;
-      movies: Movie[];
-    } }) => input.embedder.score(input.profile, input.movies)),
+    semanticRank: fromPromise(
+      async ({ input }: { input: { embedder: NonNullable<DMEContext["embedder"]>; profile: string; movies: Movie[] } }) =>
+        input.embedder.score(input.profile, input.movies)
+    ),
     /** TMDB title lookup for "something like X". */
-    resolveSeed: fromPromise(
-      async ({ input }: { input: { tmdb: TmdbClient; title: string } }) =>
-        input.tmdb.searchMovie(input.title)
+    resolveSeed: fromPromise(async ({ input }: { input: { tmdb: TmdbClient; title: string } }) =>
+      input.tmdb.searchMovie(input.title)
     ),
     /** TMDB discover with the current constraints. */
-    search: fromPromise(
-      async ({ input }: { input: { tmdb: TmdbClient; criteria: SearchCriteria } }) =>
-        input.tmdb.discover(input.criteria)
+    search: fromPromise(async ({ input }: { input: { tmdb: TmdbClient; criteria: SearchCriteria } }) =>
+      input.tmdb.discover(input.criteria)
     ),
   },
 }).createMachine({
@@ -120,7 +138,7 @@ export const dme = setup({
             onDone: {
               target: "SelectionDone",
               actions: assign(({ context, event }) => {
-                const r = event.output as { say: string; movieId?: number };
+                const r = event.output as Reply;
                 const move: Move = { type: "say", text: r.say, movieId: r.movieId };
                 return { is: { ...context.is, next_moves: [move] } };
               }),
@@ -129,24 +147,20 @@ export const dme = setup({
               target: "SelectionDone",
               actions: assign(({ context, event }) => {
                 console.error("[LLM respond failed]", event.error);
-                return { is: { ...context.is, next_moves: [{ type: "say", text: FALLBACK_SAY } as Move] } };
+                const move: Move = { type: "say", text: utterances.systemError };
+                return { is: { ...context.is, next_moves: [move] } };
               }),
             },
           },
         },
-        SelectionDone: {
-          always: [{ actions: [{ type: "sendBackNextMoves" }] }],
-          type: "final",
-        },
+        SelectionDone: { always: [{ actions: [{ type: "sendBackNextMoves" }] }], type: "final" },
       },
       onDone: "Update",
     },
     Update: {
       initial: "Init",
       states: {
-        Init: {
-          always: isuTransition("Grounding", "clear_agenda"),
-        },
+        Init: { always: isuTransition("Grounding", "clear_agenda") },
         Grounding: {
           on: {
             SAYS: [
@@ -162,10 +176,7 @@ export const dme = setup({
               {
                 // system speech, or user silence (a noinput move)
                 target: "Integrate",
-                actions: [
-                  { type: "updateLatestMoves" },
-                  { type: "isu", params: { name: "get_latest_move" } },
-                ],
+                actions: [{ type: "updateLatestMoves" }, { type: "isu", params: { name: "get_latest_move" } }],
               },
             ],
           },
@@ -173,11 +184,7 @@ export const dme = setup({
         Understand: {
           invoke: {
             src: "understand",
-            input: ({ context }) => ({
-              llm: context.llm,
-              text: context.latest_text ?? "",
-              is: context.is,
-            }),
+            input: ({ context }) => ({ llm: context.llm, text: context.latest_text ?? "", is: context.is }),
             onDone: {
               target: "Integrate",
               actions: [
@@ -195,17 +202,7 @@ export const dme = setup({
                   console.error("[LLM understand failed]", event.error);
                   return {
                     latest_moves: [] as Move[],
-                    is: {
-                      ...context.is,
-                      next_moves: [],
-                      private: {
-                        ...context.is.private,
-                        notices: [
-                          ...context.is.private.notices,
-                          "You could not process what the user just said because of a technical problem; ask them to repeat it.",
-                        ],
-                      },
-                    },
+                    is: withNotice({ ...context.is, next_moves: [] }, notices.understandFailed),
                   };
                 }),
                 { type: "isu", params: { name: "get_latest_move" } },
@@ -213,26 +210,8 @@ export const dme = setup({
             },
           },
         },
-        Integrate: {
-          ...ruleChain([
-            "integrate_retry_failed",
-            "integrate_restart",
-            "integrate_prefer",
-            "integrate_constrain",
-            "integrate_adjust",
-            "integrate_retract",
-            "integrate_vibe",
-            "integrate_like",
-            "integrate_seen_reject",
-            "integrate_recommend",
-            "filter_candidates",
-          ]),
-          onDone: "Retrieve",
-        },
-        /**
-         * Only after a user turn. Loop: resolve pending seed titles → search if dirty →
-         * next TMDB page if the pool ran dry.
-         */
+        Integrate: { ...ruleChain(INTEGRATE_RULES), onDone: "Retrieve" },
+        /** Only after a user turn. Loop: resolve pending seed titles → search if dirty → next page if the pool ran dry. */
         Retrieve: {
           initial: "Check",
           states: {
@@ -250,8 +229,7 @@ export const dme = setup({
                 src: "resolveSeed",
                 input: ({ context }) => ({
                   tmdb: context.tmdb,
-                  title:
-                    context.is.private.agenda.find((a) => a.type === "resolve_seed")?.title ?? "",
+                  title: context.is.private.agenda.find((a) => a.type === "resolve_seed")?.title ?? "",
                 }),
                 onDone: {
                   target: "Check",
@@ -273,10 +251,7 @@ export const dme = setup({
             Search: {
               invoke: {
                 src: "search",
-                input: ({ context }) => ({
-                  tmdb: context.tmdb,
-                  criteria: criteriaFromIS(context.is),
-                }),
+                input: ({ context }) => ({ tmdb: context.tmdb, criteria: criteriaFromIS(context.is) }),
                 onDone: {
                   target: "Check",
                   actions: assign(({ context, event }) => {
@@ -298,12 +273,7 @@ export const dme = setup({
           },
           onDone: "SemanticGate",
         },
-        SemanticGate: {
-          always: [
-            { guard: "canSemanticRank", target: "SemanticRank" },
-            { target: "Done" },
-          ],
-        },
+        SemanticGate: { always: [{ guard: "canSemanticRank", target: "SemanticRank" }, { target: "Done" }] },
         SemanticRank: {
           invoke: {
             src: "semanticRank",
@@ -329,10 +299,7 @@ export const dme = setup({
         },
         Done: { type: "final" },
       },
-      onDone: [
-        { target: "Select", guard: "latestSpeakerIsUsr" },
-        { target: "Update" },
-      ],
+      onDone: [{ target: "Select", guard: "latestSpeakerIsUsr" }, { target: "Update" }],
     },
   },
 });
