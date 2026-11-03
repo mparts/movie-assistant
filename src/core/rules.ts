@@ -5,7 +5,7 @@
 import { settings } from "../config/settings";
 import { notices } from "../config/prompts";
 import { adjust, constrain, retract } from "./constraints";
-import { resolvePreference } from "./lexicon";
+import { resolvePreference, synonymGenres } from "./lexicon";
 import { eligible, rank } from "./ranking";
 import { evidenceFromMoves } from "./readiness";
 import { criteriaFromIS, hasSignal, initialIS } from "./state";
@@ -36,6 +36,18 @@ const update = (is: IS, f: (s: IS) => IS): IS => {
   const next = f(is);
   return queryKey(next) !== queryKey(is) ? markDirty(next) : next;
 };
+
+/**
+ * Words from `prefer` moves that name no genre or mood we know ("goofy", "cozy"). They are taste all the same, so they
+ * are kept as vibes instead of being dropped.
+ */
+function looseTaste(is: IS): string[] {
+  return usr(is, "prefer").flatMap((m) =>
+    m.negated
+      ? []
+      : [m.mood, m.genre].flatMap((t) => (t?.trim() && !resolvePreference(t).names.length ? [t.trim()] : []))
+  );
+}
 
 /** A title the user names ("that one" = the movie in focus), looked up among what we know. */
 function findMovie(is: IS, title?: string): Movie | undefined {
@@ -184,12 +196,20 @@ export const rules: Record<string, Rule> = {
     return ms.length ? () => update(is, (s) => ms.reduce((a, m) => retract(a, m.slot), s)) : undefined;
   },
 
-  /** Loose taste ("cozy", "makes me think"): remembered, ranked against descriptions semantically. */
+  /**
+   * Loose taste ("cozy", "makes me think"): remembered, ranked against descriptions semantically. Includes words a
+   * `prefer` move carried but the lexicon does not know. A word that is a synonym of a mood ("goofy" = funny) also
+   * adds that mood's genres, only as alternatives to rank by (`prefs.genres`), never as required ones.
+   */
   integrate_vibe: ({ is }) => {
-    const ms = usr(is, "vibe");
-    if (!ms.length) return;
+    const texts = [...usr(is, "vibe").map((m) => m.text.trim()), ...looseTaste(is)].filter(Boolean);
+    if (!texts.length) return;
     return () => {
-      const next = { ...is, vibe: addUnique(is.vibe, ms.map((m) => m.text.trim()).filter(Boolean)) };
+      const next = update(is, (s) => ({
+        ...s,
+        vibe: addUnique(s.vibe, texts),
+        prefs: { ...s.prefs, genres: addUnique(s.prefs.genres, texts.flatMap(synonymGenres)) },
+      }));
       // A vibe doesn't change the TMDB query, so as the first signal it must trigger the first search itself.
       return hasSignal(is) ? next : markDirty(next);
     };

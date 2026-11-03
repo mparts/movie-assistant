@@ -32,7 +32,7 @@ Record only what the person actually expressed. Greetings, small talk, or questi
 
 Move types:
 {"type":"prefer","genre":"<genre>"}  they want this genre; add "negated":true if they do NOT want it ("no horror")
-{"type":"prefer","mood":"<word>"}  a mood word when no single genre fits: exciting, funny, scary, romantic, feel-good, dark, mind-bending, family
+{"type":"prefer","mood":"<word>"}  a mood word when no single genre fits: exciting, funny, scary, romantic, feel-good, dark, mind-bending, family. Use only these mood words; any other feeling ("goofy", "cozy") is a vibe
 {"type":"constrain","slot":"runtime|year|rating|language","op":"lte|gte|eq","value":<number, or language name>}  runtime in minutes, year as a 4-digit number, rating 0-10
 {"type":"adjust","dimension":"tone|runtime|era|rating","direction":"<word>"}  a relative request about what was just suggested: funnier, scarier, shorter, longer, newer, older, better
 {"type":"like","title":"<movie title>"}  they name a movie they love or want something similar to

@@ -116,6 +116,53 @@ describe("rules: naming a movie", () => {
   });
 });
 
+describe("rules: moods the lexicon does not know", () => {
+  /** What the dialogue manager does with a user turn, for the two rules involved. */
+  const hear = (moves: Move[], setup?: (is: IS) => void) => run("integrate_vibe", run("integrate_prefer", heard(moves, setup))!)!;
+
+  test("'goofy' is kept as a vibe and also ranks Comedy, softly", () => {
+    const next = hear([{ type: "prefer", mood: "goofy" }]);
+    expect(next.vibe).toEqual(["goofy"]);
+    expect(next.prefs.genres).toEqual(["Comedy"]);
+    expect(next.prefs.required).toEqual([]);
+    expect(next.search.status).toBe("dirty");
+  });
+
+  test("a word in no table is kept as a vibe only, and as the first signal it starts the search", () => {
+    const next = hear([{ type: "prefer", mood: "cozy" }]);
+    expect(next.vibe).toEqual(["cozy"]);
+    expect(next.prefs.genres).toEqual([]);
+    expect(next.search.status).toBe("dirty");
+  });
+
+  test("a mapped mood never becomes a required genre, even next to a required one", () => {
+    const next = hear([{ type: "prefer", mood: "heartfelt" }], (s) => {
+      s.prefs.genres = ["Romance"];
+      s.prefs.required = ["Romance"];
+    });
+    expect(next.prefs.genres).toEqual(["Romance", "Drama"]);
+    expect(next.prefs.required).toEqual(["Romance"]);
+    expect(next.vibe).toEqual(["heartfelt"]);
+  });
+
+  test("the same word as a vibe move maps the same way", () => {
+    const next = run("integrate_vibe", heard([{ type: "vibe", text: "goofy" }]))!;
+    expect(next.vibe).toEqual(["goofy"]);
+    expect(next.prefs.genres).toEqual(["Comedy"]);
+  });
+
+  test("a negated unknown mood is not turned into its opposite: nothing is stored", () => {
+    const is = heard([{ type: "prefer", mood: "goofy", negated: true }]);
+    const afterPrefer = run("integrate_prefer", is)!;
+    expect(afterPrefer.dislikes.genres).toEqual([]);
+    expect(rules.integrate_vibe({ is: afterPrefer })).toBeUndefined();
+  });
+
+  test("known moods and genres are not duplicated as vibes", () => {
+    expect(rules.integrate_vibe({ is: heard([{ type: "prefer", mood: "funny", genre: "Comedy" }]) })).toBeUndefined();
+  });
+});
+
 describe("rules: combined genres", () => {
   test("'romantic comedy' requires both genres; a multi-genre mood only adds alternatives", () => {
     const next = run("integrate_prefer", heard([{ type: "prefer", mood: "romantic", genre: "Comedy" }]))!;

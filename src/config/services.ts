@@ -18,8 +18,10 @@ export const services = {
   groq: { upstream: "https://api.groq.com/openai/v1", proxy: "/groq", secret: "GROQ_API_KEY" },
   /** University Ollama through an SSH tunnel:  ssh -f -N -L 11435:127.0.0.1:11434 mltgpu-2 */
   universityOllama: { upstream: "http://localhost:11435/v1", proxy: "/uni-ollama" },
-  /** Ollama running on this machine. */
+  /** Ollama running on this machine: native API (used for embeddings). */
   localOllama: { upstream: "http://localhost:11434/api", proxy: "/local-ollama" },
+  /** The same Ollama through its OpenAI-compatible API, which is what the chat client speaks. */
+  localLlm: { upstream: "http://localhost:11434/v1", proxy: "/local-llm" },
 } satisfies Record<string, HttpService>;
 
 export type ServiceName = keyof typeof services;
@@ -44,6 +46,8 @@ export const llmBackends: LlmBackendConfig[] = [
     extraBody: { reasoning_effort: "low" }, // gpt-oss "thinks" first; keep it short, this is a spoken conversation
   },
   { name: "ollama", service: "universityOllama", model: "llama3.1:latest", timeoutMs: 60_000 },
+
+  { name: "local", service: "localLlm", model: "qwen2.5:3b-instruct", timeoutMs: 60_000, enabled: false },
 ];
 
 /** Semantic ranking of candidates. Set `enabled: false` to rank without embeddings. */

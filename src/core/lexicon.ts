@@ -20,6 +20,24 @@ export const MOODS: Record<string, string[]> = {
   family: ["Family", "Animation"],
 };
 
+/**
+ * Everyday words that are not in MOODS but mean one of them ("goofy" is "funny"). Kept apart from MOODS on purpose:
+ * MOODS stays the short canonical list, and what a synonym adds is only ever a soft preference (see `synonymGenres`).
+ * Every value must be a key of MOODS; no key may be a genre, an alias or a mood (tested).
+ */
+export const MOOD_SYNONYMS: Record<string, string> = {
+  goofy: "funny", silly: "funny", wacky: "funny", zany: "funny", quirky: "funny", comedic: "funny", humorous: "funny",
+  creepy: "scary", terrifying: "scary", frightening: "scary", chilling: "scary", eerie: "spooky",
+  suspenseful: "thrilling", tense: "thrilling", gripping: "thrilling", "nail-biting": "thrilling",
+  heartfelt: "emotional", touching: "emotional", moving: "emotional", poignant: "emotional", tearjerker: "emotional",
+  heartbreaking: "sad", depressing: "sad", tragic: "sad",
+  gritty: "dark", bleak: "dark", grim: "dark", noir: "dark", twisted: "dark",
+  wholesome: "feel-good", lighthearted: "feel-good", "light-hearted": "feel-good", heartwarming: "feel-good",
+  uplifting: "feel-good", cheerful: "feel-good", upbeat: "feel-good", chill: "feel-good",
+  trippy: "mind-bending", cerebral: "mind-bending", "mind-blowing": "mind-bending",
+  "kid-friendly": "family",
+};
+
 export const GENRES = [
   "Action", "Adventure", "Animation", "Comedy", "Crime", "Documentary",
   "Drama", "Family", "Fantasy", "History", "Horror", "Music", "Mystery",
@@ -68,6 +86,15 @@ export function resolveGenres(text?: string): string[] {
   if (GENRE_ALIASES[t]) return [GENRE_ALIASES[t]].flat();
   const exact = GENRES.find((g) => g.toLowerCase() === t);
   return exact ? [exact] : [];
+}
+
+/**
+ * Genres for a word that is only a synonym of a mood ("goofy" → Comedy); [] for anything else, including real moods
+ * and genres (those go through `resolvePreference`). These are alternatives to rank by, never required.
+ */
+export function synonymGenres(text?: string): string[] {
+  const canonical = text ? MOOD_SYNONYMS[norm(text)] : undefined;
+  return canonical ? MOODS[canonical] : [];
 }
 
 /**
