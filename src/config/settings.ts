@@ -73,6 +73,8 @@ export const settings = {
     ],
     /** Platforms count only when included in a subscription. */
     monetization: "flatrate",
+    /** Shortest movie considered: keeps shorts (Bao, Feast, Destino…) out of every pool. */
+    minMinutes: 60,
   },
 
   search: {

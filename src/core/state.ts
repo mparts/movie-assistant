@@ -57,8 +57,11 @@ export function criteriaFromIS(is: IS, page: number = is.search.page): SearchCri
 function narrowByIntake(c: SearchCriteria, { profile, tonight }: Intake): SearchCriteria {
   const limit = tonight.maxMinutes;
   const max = limit === undefined ? c.runtime.max : Math.min(limit, c.runtime.max ?? limit);
-  // A minimum above the Phase 1 limit would leave nothing: drop the minimum instead.
-  const min = max !== undefined && c.runtime.min !== undefined && c.runtime.min > max ? undefined : c.runtime.min;
+  // Never below the floor for real movies (no shorts). A chat minimum above the Phase 1 limit would leave nothing,
+  // so it falls back to that floor.
+  const floor = settings.intake.minMinutes;
+  const wanted = max !== undefined && c.runtime.min !== undefined && c.runtime.min > max ? floor : Math.max(floor, c.runtime.min ?? floor);
+  const min = max !== undefined ? Math.min(wanted, max) : wanted;
   return {
     ...c,
     excludeGenres: [...new Set([...c.excludeGenres, ...tonight.avoidGenres])],

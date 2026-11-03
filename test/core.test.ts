@@ -68,7 +68,7 @@ describe("intake (Phase 1)", () => {
       runtime: { max: 100 }, excludeGenres: ["War", "Horror"], certificationLte: "PG",
       watch: { region: "NL", providers: [8, 337] },
     });
-    expect(criteriaFromIS(s).runtime.min).toBeUndefined();
+    expect(criteriaFromIS(s).runtime.min).toBe(60); // a chat minimum above the limit falls back to the no-shorts floor
     s.constraints.runtime = { max: 80 };
     expect(criteriaFromIS(s).runtime.max).toBe(80);
   });

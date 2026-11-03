@@ -11,7 +11,8 @@
     "typecheck": "tsc --noEmit",
     "probe": "tsx scripts/probe.ts",
     "chat": "tsx scripts/chat.ts",
-    "nlu-bench": "tsx scripts/nlu-bench.ts"
+    "nlu-bench": "tsx scripts/nlu-bench.ts",
+    "spike": "tsx scripts/spike-semantic.ts"
   },
   "devDependencies": {
     "@types/node": "^26.6.6",
