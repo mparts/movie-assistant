@@ -2,7 +2,7 @@
 import { settings } from "../config/settings";
 import { InformationState as IS, Movie } from "./types";
 
-const { weights, ratingPrior, similarityMix, semanticWeight, neutral, runtimeFit: fit } = settings.ranking;
+const { weights, ratingPrior, similarityMix, semanticWeight, neutral, runtimeFit: fit, rejectionPenalty } = settings.ranking;
 
 /** Ignore common description words so similarity reflects the plot, not filler. */
 const STOP_WORDS = new Set(
@@ -18,6 +18,11 @@ function overlap<T>(a: Set<T>, b: Set<T>): number {
   for (const x of a) if (b.has(x)) shared++;
   return shared / (a.size + b.size - shared);
 }
+
+/** How alike two movies are (0..1): shared genres and shared description words. */
+const similarity = (a: { genres: string[]; overview: string }, b: { genres: string[]; overview: string }): number =>
+  similarityMix.genres * overlap(new Set(a.genres), new Set(b.genres)) +
+  similarityMix.text * overlap(words(a.overview), words(b.overview));
 
 /** Soft runtime fit; hard runtime limits are already applied by TMDB discovery. */
 function runtimeFit(is: IS, movie: Movie): number {
@@ -41,11 +46,23 @@ export function movieScore(is: IS, movie: Movie) {
     ? [...preferred].filter((g) => movie.genres.includes(g)).length / preferred.size
     : 0;
 
-  const similarity = is.prefs.seeds.length
-    ? Math.max(...is.prefs.seeds.map((seed) =>
-        similarityMix.genres * overlap(new Set(movie.genres), new Set(seed.genres)) +
-        similarityMix.text * overlap(words(movie.overview), words(seed.overview))
-      ))
+  const likeness = is.prefs.seeds.length ? Math.max(...is.prefs.seeds.map((seed) => similarity(movie, seed))) : 0;
+
+  // Resemblance to the most similar movie the user said "no" to. "Already seen" is not a dislike (it also holds
+  // the movies they asked for), and entries without a snapshot (older data) carry nothing to compare.
+  // Genres the user asked for are left out of the comparison: turning down one rom-com is not a reason to
+  // push every other rom-com down. Only the description and the *other* genres count as resemblance.
+  const unwanted = (genres: string[]) => genres.filter((g) => !preferred.has(g));
+  const turnedDown = is.rejected.filter((r) => r.reason === "no" && (r.genres?.length || r.overview));
+  const rejection = turnedDown.length
+    ? Math.max(
+        ...turnedDown.map((r) =>
+          similarity(
+            { genres: unwanted(movie.genres), overview: movie.overview },
+            { genres: unwanted(r.genres ?? []), overview: r.overview ?? "" }
+          )
+        )
+      )
     : 0;
 
   const votes = Math.max(0, movie.votes || 0);
@@ -54,8 +71,9 @@ export function movieScore(is: IS, movie: Movie) {
   ));
   const runtime = runtimeFit(is, movie);
   const total =
-    weights.genres * genres + weights.similarity * similarity + weights.rating * rating + weights.runtime * runtime;
-  return { total, genres, similarity, rating, runtime };
+    weights.genres * genres + weights.similarity * likeness + weights.rating * rating + weights.runtime * runtime -
+    rejectionPenalty * rejection; // can dip below 0: only the order matters
+  return { total, genres, similarity: likeness, rating, runtime, rejection };
 }
 
 /** Drop movies that may not be suggested (already suggested, rejected/seen, disliked genre). Keeps order. */

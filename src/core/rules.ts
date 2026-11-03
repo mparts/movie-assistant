@@ -207,9 +207,14 @@ export const rules: Record<string, Rule> = {
       let rejected = is.rejected;
       for (const { title, reason } of ms) {
         const target = findMovie(is, title);
-        if (target && !rejected.some((r) => r.id === target.id)) rejected = [...rejected, { id: target.id, reason }];
+        if (target && !rejected.some((r) => r.id === target.id)) {
+          // keep a snapshot: the movie leaves the candidates, but later candidates are compared to it
+          rejected = [...rejected, { id: target.id, reason, genres: target.genres, overview: target.overview }];
+        }
       }
-      return { ...is, rejected };
+      // Re-rank now: with no vibe or liked movie, nothing else would re-sort until the next TMDB search.
+      // Safe for semantic order too, because the semantic step re-sorts after this whenever it applies.
+      return { ...is, rejected, candidates: rank({ ...is, rejected }, is.candidates) };
     };
   },
 

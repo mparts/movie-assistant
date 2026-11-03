@@ -80,7 +80,8 @@ export interface InformationState {
 
   candidates: Movie[]; // filtered + ranked, best first
   recommended: Movie[]; // in order shown; last = focus
-  rejected: { id: number; reason: "seen" | "no" }[];
+  /** `genres`/`overview` are a snapshot of the movie, so later candidates can be compared to ones the user turned down. */
+  rejected: { id: number; reason: "seen" | "no"; genres?: string[]; overview?: string }[];
   /** consecutive system turns that recommended a movie; reset by any turn that didn't */
   recommendStreak: number;
 

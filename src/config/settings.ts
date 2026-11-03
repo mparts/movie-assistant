@@ -68,6 +68,13 @@ export const settings = {
   ranking: {
     /** Weighted baseline; weights sum to 1. */
     weights: { genres: 0.4, similarity: 0.3, rating: 0.2, runtime: 0.1 },
+    /**
+     * Subtracted from the score of a movie that resembles one the user turned down ("no", not "already seen"):
+     * this times its similarity (0..1) to the most similar rejected movie, judged on the description and on genres
+     * the user did NOT ask for. Only reorders; nothing is excluded.
+     * Kept apart from `weights` so those still sum to 1.
+     */
+    rejectionPenalty: 0.3,
     /** Share of the final score taken by embeddings when they are available. */
     semanticWeight: 0.55,
     /** Bayesian shrinkage: a 9/10 with 3 votes shouldn't outrank an 8/10 with 10,000 votes. */
