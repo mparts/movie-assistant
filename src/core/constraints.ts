@@ -86,14 +86,14 @@ export function retract(is: IS, slot: string): IS {
     case "year": return { ...is, constraints: { ...c, year: {} } };
     case "rating": return { ...is, constraints: { ...c, rating: undefined } };
     case "language": return { ...is, constraints: { ...c, language: undefined } };
-    case "genres": return { ...is, prefs: { ...is.prefs, genres: [] } };
+    case "genres": return { ...is, prefs: { ...is.prefs, genres: [], required: [] } };
     case "dislikes": return { ...is, dislikes: { genres: [] } };
     case "vibe": return { ...is, vibe: [] };
     case "all":
       return {
         ...is,
         vibe: [],
-        prefs: { genres: [], seeds: [] },
+        prefs: { genres: [], required: [], seeds: [] },
         constraints: { runtime: {}, year: {} },
         dislikes: { genres: [] },
       };

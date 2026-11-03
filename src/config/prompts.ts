@@ -21,6 +21,8 @@ export const notices = {
   seedNotFound: (title: string) => `No movie called "${title}" was found in the database.`,
   dbUnreachable: "The movie database could not be reached.",
   restarted: "The user asked to start over, so earlier preferences are forgotten.",
+  genresRelaxed: (genres: string[]) =>
+    `Hardly any movies are ${genres.join(" and ")} at once, so the suggestions are now movies with any of these genres.`,
 };
 
 /** Turns one utterance into structured moves. */

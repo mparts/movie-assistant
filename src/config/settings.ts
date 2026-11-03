@@ -57,6 +57,11 @@ export const settings = {
     pagesPerBatch: 3,
     /** Pages of results a session may draw from, visited in a per-session random order. */
     pageWindow: 12,
+    /**
+     * Fewer TMDB results than this for a combination of named genres ("Western" AND "Music")
+     * → search for any of them instead, and tell the user.
+     */
+    thinPool: 20,
     /** How many batches to try when the pool runs dry. */
     maxBatches: 5,
     runtimeLookupConcurrency: 10,

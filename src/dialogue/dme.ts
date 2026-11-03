@@ -223,6 +223,7 @@ export const dme = setup({
                 { guard: "latestSpeakerIsSys", target: "Done" },
                 { guard: "seedPending", target: "ResolveSeed" },
                 { guard: "needSearch", target: "Search" },
+                isuTransition("Check", "relax_genres"),
                 isuTransition("Check", "next_page"),
                 { target: "Done" },
               ],
@@ -258,7 +259,8 @@ export const dme = setup({
                 onDone: {
                   target: "Check",
                   actions: assign(({ context, event }) => {
-                    const is = applyResults(context.is, event.output as Movie[]);
+                    const { movies, total } = event.output as { movies: Movie[]; total: number };
+                    const is = applyResults(context.is, movies, total);
                     logIS("search_result", is);
                     return { is };
                   }),

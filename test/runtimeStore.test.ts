@@ -22,7 +22,7 @@ beforeEach(() => {
     if (path.endsWith("/genre/movie/list")) return json({ genres: [{ id: 35, name: "Comedy" }] });
     if (path.endsWith("/discover/movie")) {
       const results = [1, 2, 3].map((id) => ({ id, title: `M${id}`, genre_ids: [35], vote_average: 7, vote_count: 100, overview: "x" }));
-      return json({ total_pages: 1, results });
+      return json({ total_pages: 1, total_results: 3, results });
     }
     const id = Number(path.split("/").pop());
     movieCalls.push(id);
@@ -35,7 +35,7 @@ afterEach(() => {
   rmSync(dir, { recursive: true, force: true });
 });
 
-const criteria: SearchCriteria = { genres: [], excludeGenres: [], runtime: {}, year: {}, page: 1 };
+const criteria: SearchCriteria = { genres: [], matchAll: false, excludeGenres: [], runtime: {}, year: {}, page: 1 };
 const tmdb = (store?: RuntimeStore) =>
   createTmdb({
     baseUrl: "http://x", language: "en-US", sortBy: "popularity.desc", minVotes: 1, pagesPerBatch: 1, pageWindow: 1,
@@ -44,25 +44,25 @@ const tmdb = (store?: RuntimeStore) =>
 
 describe("runtime store", () => {
   test("a restart reuses saved runtimes and makes no /movie calls", async () => {
-    const first = await tmdb(createRuntimeFileStore(file, 100)).discover(criteria);
+    const first = await tmdb(createRuntimeFileStore(file, 100)).discover(criteria).then((r) => r.movies);
     expect(movieCalls.sort()).toEqual([1, 2, 3]);
     expect(first.map((m) => m.runtime)).toEqual([91, 92, 93]);
 
     movieCalls = [];
-    const second = await tmdb(createRuntimeFileStore(file, 100)).discover(criteria);
+    const second = await tmdb(createRuntimeFileStore(file, 100)).discover(criteria).then((r) => r.movies);
     expect(movieCalls).toEqual([]);
     expect(second.map((m) => m.runtime)).toEqual([91, 92, 93]);
   });
 
   test("failed lookups are not saved and are retried next time", async () => {
     failIds.add(3);
-    const first = await tmdb(createRuntimeFileStore(file, 100)).discover(criteria);
+    const first = await tmdb(createRuntimeFileStore(file, 100)).discover(criteria).then((r) => r.movies);
     expect(first.map((m) => m.runtime)).toEqual([91, 92, undefined]);
     expect(JSON.parse(readFileSync(file, "utf8")).entries).toEqual([[1, 91], [2, 92]]);
 
     movieCalls = [];
     failIds.clear();
-    const second = await tmdb(createRuntimeFileStore(file, 100)).discover(criteria);
+    const second = await tmdb(createRuntimeFileStore(file, 100)).discover(criteria).then((r) => r.movies);
     expect(movieCalls).toEqual([3]); // only the one that failed
     expect(second.map((m) => m.runtime)).toEqual([91, 92, 93]);
   });
@@ -71,7 +71,7 @@ describe("runtime store", () => {
     await tmdb(createRuntimeFileStore(file, 100)).discover(criteria); // creates the folder and file
     writeFileSync(file, "{ not json");
     movieCalls = [];
-    const movies = await tmdb(createRuntimeFileStore(file, 100)).discover(criteria);
+    const movies = await tmdb(createRuntimeFileStore(file, 100)).discover(criteria).then((r) => r.movies);
     expect(movieCalls.sort()).toEqual([1, 2, 3]);
     expect(movies.map((m) => m.runtime)).toEqual([91, 92, 93]);
     expect(JSON.parse(readFileSync(file, "utf8")).entries).toHaveLength(3);
@@ -96,11 +96,11 @@ describe("runtime store", () => {
 
   test("without a store, behaviour is unchanged: memory cache only", async () => {
     const t = tmdb();
-    await t.discover(criteria);
+    await t.discover(criteria).then((r) => r.movies);
     movieCalls = [];
-    await t.discover(criteria);
+    await t.discover(criteria).then((r) => r.movies);
     expect(movieCalls).toEqual([]); // same instance: served from memory
-    await tmdb().discover(criteria);
+    await tmdb().discover(criteria).then((r) => r.movies);
     expect(movieCalls.sort()).toEqual([1, 2, 3]); // a new instance starts empty
   });
 });

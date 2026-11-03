@@ -115,3 +115,49 @@ describe("rules: naming a movie", () => {
     expect(next.candidates.map((m) => m.id)).toEqual([3, 2]); // before the rejection they were [2, 3]
   });
 });
+
+describe("rules: combined genres", () => {
+  test("'romantic comedy' requires both genres; a multi-genre mood only adds alternatives", () => {
+    const next = run("integrate_prefer", heard([{ type: "prefer", mood: "romantic", genre: "Comedy" }]))!;
+    expect(next.prefs.required).toEqual(["Romance", "Comedy"]);
+    expect(next.search.status).toBe("dirty");
+
+    const exciting = run("integrate_prefer", heard([{ type: "prefer", mood: "exciting" }]))!;
+    expect(exciting.prefs.genres).toEqual(["Action", "Thriller", "Adventure"]);
+    expect(exciting.prefs.required).toEqual([]);
+  });
+
+  test("a negated genre or a retract drops it from the required set", () => {
+    const setup = (s: IS) => {
+      s.prefs.genres = ["Romance", "Comedy"];
+      s.prefs.required = ["Romance", "Comedy"];
+    };
+    const negated = run("integrate_prefer", heard([{ type: "prefer", genre: "Romance", negated: true }], setup))!;
+    expect(negated.prefs.required).toEqual(["Comedy"]);
+    const retracted = run("integrate_retract", heard([{ type: "retract", slot: "genres" }], setup))!;
+    expect(retracted.prefs.required).toEqual([]);
+  });
+
+  /** After a search for these required genres that found `total` movies. */
+  const searched = (required: string[], total: number) =>
+    heard([], (s) => {
+      s.prefs.genres = [...required];
+      s.prefs.required = [...required];
+      s.search = { status: "idle", page: 1, noMore: total === 0, total };
+    });
+
+  test("a combination with hardly any matches falls back to any of the genres, with a notice", () => {
+    const next = run("relax_genres", searched(["Western", "Music"], 4))!;
+    expect(next.prefs.required).toEqual([]);
+    expect(next.prefs.genres).toEqual(["Western", "Music"]);
+    expect(next.search).toEqual({ status: "dirty", page: 1, noMore: false });
+    expect(next.private.notices).toEqual([notices.genresRelaxed(["Western", "Music"])]);
+    // and the next search asks for either genre
+    expect(run("relax_genres", next)).toBeUndefined();
+  });
+
+  test("no fallback for a single genre or a large enough pool", () => {
+    expect(run("relax_genres", searched(["Western"], 3))).toBeUndefined();
+    expect(run("relax_genres", searched(["Romance", "Comedy"], settings.search.thinPool))).toBeUndefined();
+  });
+});

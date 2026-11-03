@@ -26,7 +26,8 @@ export const GENRES = [
   "Romance", "Science Fiction", "Thriller", "War", "Western",
 ];
 
-const GENRE_ALIASES: Record<string, string> = {
+/** Aliases may name a combination ("romcom"): every genre in it is required. */
+const GENRE_ALIASES: Record<string, string | string[]> = {
   "sci-fi": "Science Fiction",
   "sci fi": "Science Fiction",
   scifi: "Science Fiction",
@@ -34,7 +35,10 @@ const GENRE_ALIASES: Record<string, string> = {
   comedies: "Comedy",
   dramas: "Drama",
   thrillers: "Thriller",
-  romcom: "Romance",
+  romcom: ["Romance", "Comedy"],
+  "rom-com": ["Romance", "Comedy"],
+  "rom com": ["Romance", "Comedy"],
+  "romantic comedy": ["Romance", "Comedy"],
   "love story": "Romance",
   cartoon: "Animation",
   animated: "Animation",
@@ -61,9 +65,23 @@ export function resolveGenres(text?: string): string[] {
   if (!text) return [];
   const t = norm(text);
   if (MOODS[t]) return MOODS[t];
-  if (GENRE_ALIASES[t]) return [GENRE_ALIASES[t]];
+  if (GENRE_ALIASES[t]) return [GENRE_ALIASES[t]].flat();
   const exact = GENRES.find((g) => g.toLowerCase() === t);
   return exact ? [exact] : [];
+}
+
+/**
+ * Free text → genre names, and whether a movie must have ALL of them (`required`).
+ * A named genre, an alias, or a mood with a single genre ("romantic" = Romance) is required:
+ * "romantic comedy" means both. A mood with several genres ("exciting") offers alternatives.
+ */
+export function resolvePreference(text?: string): { names: string[]; required: boolean } {
+  const t = text ? norm(text) : "";
+  // "Family" is both a genre and a mood (Family, Animation): the genre name wins.
+  const exact = GENRES.find((g) => g.toLowerCase() === t);
+  if (exact) return { names: [exact], required: true };
+  const names = resolveGenres(text);
+  return { names, required: names.length > 0 && (!MOODS[t] || MOODS[t].length === 1) };
 }
 
 /** "funnier" / "more exciting" → genre names. */

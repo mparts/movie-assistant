@@ -52,7 +52,8 @@ export function buildDiscoverParams(
   };
   const withIds = ids(c.genres);
   const withoutIds = ids(c.excludeGenres);
-  if (withIds.length) p.with_genres = withIds.join("|"); // OR
+  // TMDB has no mixed AND/OR: "35,28|53" silently becomes "35,28". So one or the other.
+  if (withIds.length) p.with_genres = withIds.join(c.matchAll ? "," : "|");
   if (withoutIds.length) p.without_genres = withoutIds.join(",");
   if (c.runtime.min !== undefined) p["with_runtime.gte"] = String(c.runtime.min);
   if (c.runtime.max !== undefined) p["with_runtime.lte"] = String(c.runtime.max);
@@ -156,7 +157,7 @@ export function createTmdb(o: TmdbOptions): TmdbClient {
         .map((r) => toMovie(r, g.byId))
         .filter((m) => !seen.has(m.id) && !!seen.add(m.id));
       await fillRuntimes(movies);
-      return movies;
+      return { movies, total: probe.total_results ?? movies.length };
     },
     async searchMovie(title) {
       const g = await loadGenres();

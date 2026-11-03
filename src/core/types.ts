@@ -69,8 +69,11 @@ export interface InformationState {
   /** Recommendation gate: substantive user turns and distinct pieces of information. */
   readiness: { meaningfulTurns: number; evidence: string[] };
 
-  /** soft: used for ranking */
-  prefs: { genres: string[]; seeds: Movie[] };
+  /**
+   * `genres`: every wanted genre, used for ranking. `required`: the subset the user named, which a movie must
+   * ALL have ("romantic comedy"). Mood and liked-movie genres are alternatives and stay out of `required`.
+   */
+  prefs: { genres: string[]; required: string[]; seeds: Movie[] };
   /** loose taste descriptors, matched against movie descriptions semantically */
   vibe: string[];
   /** hard: sent to TMDB */
@@ -85,12 +88,14 @@ export interface InformationState {
   /** consecutive system turns that recommended a movie; reset by any turn that didn't */
   recommendStreak: number;
 
-  /** `page` counts batches of TMDB pages, not single pages. */
-  search: { status: "idle" | "dirty" | "failed"; page: number; noMore: boolean };
+  /** `page` counts batches of TMDB pages, not single pages. `total`: TMDB's result count for the last search. */
+  search: { status: "idle" | "dirty" | "failed"; page: number; noMore: boolean; total?: number };
 }
 
 export interface SearchCriteria {
-  genres: string[]; // OR-ed
+  genres: string[];
+  /** true: a movie must have every genre (AND). false: any of them (OR). */
+  matchAll: boolean;
   excludeGenres: string[];
   runtime: Range;
   year: Range;
@@ -100,7 +105,8 @@ export interface SearchCriteria {
 }
 
 export interface TmdbClient {
-  discover(criteria: SearchCriteria): Promise<Movie[]>;
+  /** `total` is TMDB's count of all matching movies, not just the ones fetched. */
+  discover(criteria: SearchCriteria): Promise<{ movies: Movie[]; total: number }>;
   searchMovie(title: string): Promise<Movie | null>;
 }
 

@@ -9,7 +9,7 @@ export const initialIS = (): IS => ({
   shared: {},
   history: [],
   readiness: { meaningfulTurns: 0, evidence: [] },
-  prefs: { genres: [], seeds: [] },
+  prefs: { genres: [], required: [], seeds: [] },
   vibe: [],
   constraints: { runtime: {}, year: {} },
   dislikes: { genres: [] },
@@ -37,7 +37,9 @@ export const hasSignal = (is: IS): boolean => {
 
 export function criteriaFromIS(is: IS, page: number = is.search.page): SearchCriteria {
   return {
-    genres: is.prefs.genres,
+    // Named genres are combined (AND); with none named, the mood/liked-movie genres are alternatives (OR).
+    genres: is.prefs.required.length ? is.prefs.required : is.prefs.genres,
+    matchAll: is.prefs.required.length > 0,
     excludeGenres: is.dislikes.genres,
     runtime: is.constraints.runtime,
     year: is.constraints.year,

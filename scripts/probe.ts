@@ -26,7 +26,7 @@ async function main() {
     const m = await tmdb.searchMovie(t);
     console.log(`search "${t}" ->`, m ? `${m.title} (${m.year}) id=${m.id}` : null);
   }
-  const pool = await tmdb.discover({ genres: ["Comedy"], excludeGenres: ["Horror"], runtime: { max: 110 }, year: {}, page: 1 });
+  const { movies: pool } = await tmdb.discover({ genres: ["Comedy"], matchAll: false, excludeGenres: ["Horror"], runtime: { max: 110 }, year: {}, page: 1 });
   console.log(`discover Comedy ≤110min: ${pool.length} movies, e.g.`, pool.slice(0, 4).map((m) => `${m.title} (${m.runtime ?? "?"}min)`).join(" | "));
 
   section("Embeddings");

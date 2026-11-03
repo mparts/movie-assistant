@@ -44,9 +44,18 @@ describe("information state", () => {
     s.constraints.runtime = { max: 100 };
     s.search.page = 2;
     expect(criteriaFromIS(s)).toEqual({
-      genres: ["Comedy"], excludeGenres: ["Horror"], runtime: { max: 100 }, year: {},
+      genres: ["Comedy"], matchAll: false, excludeGenres: ["Horror"], runtime: { max: 100 }, year: {},
       rating: undefined, language: undefined, page: 2,
     });
+  });
+
+  test("named genres are searched together; without them, mood genres are alternatives", () => {
+    const s = initialIS();
+    s.prefs.genres = ["Romance", "Comedy", "Action", "Thriller"];
+    s.prefs.required = ["Romance", "Comedy"];
+    expect(criteriaFromIS(s)).toMatchObject({ genres: ["Romance", "Comedy"], matchAll: true });
+    s.prefs.required = [];
+    expect(criteriaFromIS(s)).toMatchObject({ genres: ["Romance", "Comedy", "Action", "Thriller"], matchAll: false });
   });
 });
 

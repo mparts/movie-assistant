@@ -5,7 +5,7 @@
 import { settings } from "../config/settings";
 import { notices } from "../config/prompts";
 import { adjust, constrain, retract } from "./constraints";
-import { resolveGenres } from "./lexicon";
+import { resolvePreference } from "./lexicon";
 import { eligible, rank } from "./ranking";
 import { evidenceFromMoves } from "./readiness";
 import { criteriaFromIS, hasSignal, initialIS } from "./state";
@@ -69,6 +69,7 @@ export function applySeed(is: IS, movie: Movie | null): IS {
   return update(base, (s) => ({
     ...s,
     prefs: {
+      ...s.prefs,
       seeds: s.prefs.seeds.some((x) => x.id === movie.id) ? s.prefs.seeds : [...s.prefs.seeds, movie],
       genres: addUnique(s.prefs.genres, movie.genres.filter((g) => !s.dislikes.genres.includes(g))),
     },
@@ -77,10 +78,10 @@ export function applySeed(is: IS, movie: Movie | null): IS {
   }));
 }
 
-export const applyResults = (is: IS, movies: Movie[]): IS => ({
+export const applyResults = (is: IS, movies: Movie[], total: number = movies.length): IS => ({
   ...is,
   candidates: rank(is, movies),
-  search: { ...is.search, status: "idle", noMore: movies.length === 0 },
+  search: { ...is.search, status: "idle", noMore: movies.length === 0, total },
 });
 
 export const applyFailure = (is: IS): IS => ({
@@ -141,17 +142,27 @@ export const rules: Record<string, Rule> = {
     return () =>
       update(is, (s) =>
         ms.reduce((acc, m) => {
-          const names = [...resolveGenres(m.mood), ...resolveGenres(m.genre)];
+          const resolved = [resolvePreference(m.mood), resolvePreference(m.genre)];
+          const names = resolved.flatMap((r) => r.names);
           if (!names.length) return acc;
+          const required = resolved.flatMap((r) => (r.required ? r.names : []));
           return m.negated
             ? {
                 ...acc,
-                prefs: { ...acc.prefs, genres: without(acc.prefs.genres, names) },
+                prefs: {
+                  ...acc.prefs,
+                  genres: without(acc.prefs.genres, names),
+                  required: without(acc.prefs.required, names),
+                },
                 dislikes: { genres: addUnique(acc.dislikes.genres, names) },
               }
             : {
                 ...acc,
-                prefs: { ...acc.prefs, genres: addUnique(acc.prefs.genres, names) },
+                prefs: {
+                  ...acc.prefs,
+                  genres: addUnique(acc.prefs.genres, names),
+                  required: addUnique(acc.prefs.required, required),
+                },
                 dislikes: { genres: without(acc.dislikes.genres, names) },
               };
         }, s)
@@ -239,6 +250,24 @@ export const rules: Record<string, Rule> = {
   },
 
   /* -- retrieve -- */
+
+  /**
+   * Hardly any movies have all the named genres at once ("Western" AND "Music"): search for any of them instead,
+   * and tell the user. The few that have them all still rank first, since they match every wanted genre.
+   */
+  relax_genres: ({ is }) =>
+    is.search.status === "idle" &&
+    is.search.total !== undefined &&
+    is.search.total < settings.search.thinPool &&
+    is.prefs.required.length >= 2
+      ? () => {
+          const relaxed = update(is, (s) => ({ ...s, prefs: { ...s.prefs, required: [] } }));
+          return {
+            ...relaxed,
+            private: { ...relaxed.private, notices: [...relaxed.private.notices, notices.genresRelaxed(is.prefs.required)] },
+          };
+        }
+      : undefined,
 
   /** Pool exhausted but TMDB may have more → ask for the next batch of pages. */
   next_page: ({ is }) =>
