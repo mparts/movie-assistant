@@ -29,7 +29,7 @@ export function resolveBackend(b: LlmBackendConfig, where: "upstream" | "proxy",
  * `where: "proxy"`    → Vite proxy prefixes, no secrets (browser).
  *
  * `extras.embeddingStore` / `extras.runtimeStore` make description vectors / movie runtimes survive restarts
- * (Node scripts pass file stores; the browser passes nothing and keeps them in memory).
+ * (Node scripts pass file stores; the browser passes stores that reach the same files through the dev server).
  * `extras.onLlmAnswer` is told which LLM backend answered each call.
  */
 export function createClients(

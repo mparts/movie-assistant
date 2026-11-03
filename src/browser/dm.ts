@@ -9,10 +9,12 @@ import { settings } from "../config/settings";
 import { initialIS } from "../core/state";
 import type { DMContext, DMEvent, NextMovesEvent } from "../core/types";
 import { createClients } from "../services";
+import { loadBrowserStores } from "../services/browserStores";
 import { dme } from "../dialogue/dme";
 import { nlg } from "../dialogue/nlg";
 
-const clients = createClients("proxy");
+// The same on-disk caches as the typed chat, through the dev server (loaded once, before the first search).
+const clients = createClients("proxy", {}, await loadBrowserStores());
 
 const speechSettings: Settings = {
   azureCredentials: { endpoint: azure.tokenEndpoint, key: import.meta.env.VITE_AZURE_KEY },
