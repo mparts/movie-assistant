@@ -21,7 +21,6 @@
     "vitest": "^5.0.1"
   },
   "dependencies": {
-    "@statelyai/inspect": "^0.7.2",
     "speechstate": "^2.17.0",
     "xstate": "^5.28.0"
   }

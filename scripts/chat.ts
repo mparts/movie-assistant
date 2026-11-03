@@ -60,7 +60,7 @@ const intake = await pickIntake();
 const { profile, tonight } = intake;
 const cert = certificationFor(tonight.youngestAge);
 console.log(
-  `Profile: ${profile.name} · ${profile.country} · ${tonight.company}, youngest ${tonight.youngestAge}${cert ? ` → ${cert}` : ""}` +
+  `Profile: ${profile.name ?? "Guest"} · ${profile.country} · ${tonight.company}, youngest ${tonight.youngestAge}${cert ? ` → ${cert}` : ""}` +
     ` · ${tonight.maxMinutes ? `≤${tonight.maxMinutes} min` : "no time limit"}` +
     ` · ${profile.platforms.length ? `platforms ${profile.platforms.join("|")}` : "any platform"}` +
     (tonight.avoidGenres.length ? ` · avoid ${tonight.avoidGenres.join(", ")}` : "")

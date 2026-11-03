@@ -1,12 +1,12 @@
-/** Top-level machine for the browser: speech in/out (speechstate) around the dialogue manager. */
+/**
+ * Top-level machine for the browser: Phase 1 (the settings form) and then the spoken chat, with speechstate
+ * around the dialogue manager.  Prepare → Intake (form; INTAKE_DONE) → Main (chat; CHANGE_SETTINGS goes back).
+ */
 import { createActor, setup, assign, sendTo, type AnyMachineSnapshot } from "xstate";
 import { speechstate, type Settings } from "speechstate";
-import { createBrowserInspector } from "@statelyai/inspect";
 import { azure } from "../config/services";
 import { settings } from "../config/settings";
 import { initialIS } from "../core/state";
-import { parseIntake } from "../core/intake";
-import sampleProfile from "../../profiles/family.json";
 import type { DMContext, DMEvent, NextMovesEvent } from "../core/types";
 import { createClients } from "../services";
 import { dme } from "../dialogue/dme";
@@ -27,23 +27,32 @@ const speechSettings: Settings = {
 const dmMachine = setup({
   actors: { dme },
   actions: {
-    speak: ({ context, event }) =>
-      context.ssRef.send({ type: "SPEAK", value: { utterance: nlg((event as NextMovesEvent).value) } }),
+    speak: ({ context }) => context.ssRef.send({ type: "SPEAK", value: { utterance: context.jakeSaid ?? "" } }),
     listen: ({ context }) => context.ssRef.send({ type: "LISTEN" }),
   },
   types: {} as { context: DMContext; events: DMEvent },
 }).createMachine({
-  // Until the settings form exists (todo step 3), the browser uses a sample profile.
-  context: ({ spawn }) => ({ ssRef: spawn(speechstate, { input: speechSettings }), ...clients, is: initialIS(parseIntake(sampleProfile)) }),
+  context: ({ spawn }) => ({ ssRef: spawn(speechstate, { input: speechSettings }), ...clients }),
   id: "DM",
   initial: "Prepare",
   states: {
     Prepare: {
       entry: ({ context }) => context.ssRef.send({ type: "PREPARE" }),
-      on: { ASRTTS_READY: "WaitToStart" },
+      on: { ASRTTS_READY: "Intake" },
     },
-    WaitToStart: { on: { CLICK: "Main" } },
+    /** The form is on screen. A new conversation starts from its answers; nothing from an earlier one is kept. */
+    Intake: {
+      on: {
+        INTAKE_DONE: {
+          target: "Main",
+          actions: assign(({ event }) => ({ is: initialIS(event.intake), jakeSaid: undefined, lastUtterance: undefined })),
+        },
+      },
+    },
     Main: {
+      // Leaving Main stops the DME. Speech is not stopped (speechstate cannot restart after STOP): the form waits
+      // until speech is idle before it lets a new conversation start.
+      on: { CHANGE_SETTINGS: "Intake" },
       type: "parallel",
       states: {
         Interpret: {
@@ -77,7 +86,10 @@ const dmMachine = setup({
               on: {
                 NEXT_MOVES: {
                   target: "Speaking",
-                  actions: sendTo("dmeID", ({ event }) => ({ type: "SAYS", value: { speaker: "sys", moves: event.value } })),
+                  actions: [
+                    assign(({ event }) => ({ jakeSaid: nlg((event as NextMovesEvent).value) })),
+                    sendTo("dmeID", ({ event }) => ({ type: "SAYS", value: { speaker: "sys", moves: event.value } })),
+                  ],
                 },
               },
             },
@@ -93,7 +105,7 @@ const dmMachine = setup({
               tmdb: context.tmdb,
               llm: context.llm,
               embedder: context.embedder,
-              is: context.is,
+              is: context.is!, // set by INTAKE_DONE, the only way into Main
             }),
           },
         },
@@ -102,14 +114,14 @@ const dmMachine = setup({
   },
 });
 
-export const dmActor = createActor(dmMachine, { inspect: createBrowserInspector().inspect }).start();
+export const dmActor = createActor(dmMachine).start();
 
-dmActor.subscribe((s: AnyMachineSnapshot) => console.log("%cState value:", "background-color: #056dff", s.value));
+/** speechstate's own view of itself: "not-ready", "idle", "speaking", "recognising", ... */
+export const speechView = (): string =>
+  (Object.values(dmActor.getSnapshot().context.ssRef.getSnapshot().getMeta())[0] as { view?: string } | undefined)?.view ?? "";
 
-/** Wires the start button to the machine and mirrors speechstate's view into it. */
-export function setupButton(button: HTMLElement) {
-  button.addEventListener("click", () => dmActor.send({ type: "CLICK" }));
-  dmActor.getSnapshot().context.ssRef.subscribe((s: AnyMachineSnapshot) => {
-    button.innerHTML = `${Object.values(s.getMeta())[0]["view"]}`;
-  });
+/** Calls `f` whenever the machine or speechstate changes. */
+export function onChange(f: () => void) {
+  dmActor.subscribe(f);
+  dmActor.getSnapshot().context.ssRef.subscribe((_: AnyMachineSnapshot) => f());
 }

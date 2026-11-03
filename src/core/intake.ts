@@ -1,4 +1,4 @@
-/** Phase 1: the hard facts from the form (or `--profile <file>`), checked once and then read-only. */
+/** Phase 1: the hard facts from the settings form (or a profile file in the typed chat), checked once and then read-only. */
 import { settings } from "../config/settings";
 import { GENRES } from "./lexicon";
 
@@ -6,8 +6,8 @@ export type Company = "alone" | "relationship" | "family" | "friends";
 const COMPANIES: Company[] = ["alone", "relationship", "family", "friends"];
 
 export interface Intake {
-  /** `platforms`: TMDB watch-provider ids; empty = "I don't stream", no platform filter. */
-  profile: { name: string; age: number; country: string; platforms: number[] };
+  /** `name` absent = Guest (nothing is saved). `platforms`: TMDB watch-provider ids; empty = "I don't stream", no platform filter. */
+  profile: { name?: string; age: number; country: string; platforms: number[] };
   /** `youngestAge` is always set after parsing: for alone and relationship it is the user's own age. */
   tonight: { maxMinutes?: number; avoidGenres: string[]; company: Company; youngestAge: number };
 }
@@ -23,7 +23,7 @@ export function parseIntake(raw: unknown): Intake {
   const p = o.profile ?? fail("missing profile");
   const t = o.tonight ?? fail("missing tonight");
 
-  const name = typeof p.name === "string" && p.name.trim() ? p.name.trim() : fail("name");
+  const name = p.name === undefined ? undefined : typeof p.name === "string" && p.name.trim() ? p.name.trim() : fail("name");
   const age = isAge(p.age) ? p.age : fail("age");
   const country = typeof p.country === "string" && /^[A-Z]{2}$/.test(p.country) ? p.country : fail("country");
   const platforms = Array.isArray(p.platforms ?? []) && (p.platforms ?? []).every(Number.isInteger)
@@ -38,7 +38,7 @@ export function parseIntake(raw: unknown): Intake {
   const shared = company === "family" || company === "friends";
   const youngestAge = shared && t.youngestAge !== undefined ? (isAge(t.youngestAge) ? t.youngestAge : fail("youngestAge")) : age;
 
-  return { profile: { name, age, country, platforms }, tonight: { maxMinutes, avoidGenres, company, youngestAge } };
+  return { profile: { ...(name !== undefined && { name }), age, country, platforms }, tonight: { maxMinutes, avoidGenres, company, youngestAge } };
 }
 
 /** Highest US certification allowed for the youngest viewer, or undefined for no limit. */

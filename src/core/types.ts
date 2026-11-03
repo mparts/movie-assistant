@@ -152,15 +152,22 @@ export interface DMEContext extends TotalInformationState {
   llm: LlmClient;
 }
 
-export interface DMContext extends TotalInformationState {
+/** Browser top level. `is` exists once the settings form is done; `jakeSaid` is Jake's last line, shown on screen. */
+export interface DMContext {
   embedder?: Embedder;
   ssRef: any;
   tmdb: TmdbClient;
   llm: LlmClient;
+  is?: InformationState;
   lastUtterance?: string;
+  jakeSaid?: string;
 }
 
-export type DMEvent = { type: "CLICK" } | SpeechStateExternalEvent | NextMovesEvent;
+export type DMEvent =
+  | { type: "INTAKE_DONE"; intake: Intake }
+  | { type: "CHANGE_SETTINGS" }
+  | SpeechStateExternalEvent
+  | NextMovesEvent;
 
 export type DMEEvent = SaysMovesEvent;
 

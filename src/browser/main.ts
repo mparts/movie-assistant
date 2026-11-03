@@ -1,12 +1,66 @@
+/** The page: the settings form (Phase 1), then the spoken chat with Jake (Phase 2). */
 import "./style.css";
-import { setupButton } from "./dm";
+import { formText as T } from "../config/prompts";
+import { certificationFor } from "../core/intake";
+import { dmActor, onChange, speechView } from "./dm";
+import { createIntakeForm } from "./intakeForm";
 
 document.querySelector("#app")!.innerHTML = `
-  <div>
-    <div class="card">
-      <button id="counter" type="button"></button>
-    </div>
-  </div>
-`;
+  <header><span class="title">${T.title}</span><span class="tagline">${T.tagline}</span></header>
+  <main>
+    <section id="form" class="panel"></section>
+    <section id="chat" class="panel" hidden>
+      <div id="tonight-summary" class="summary"></div>
+      <div class="line jake"><span class="who">${T.chat.jake}</span><p id="jake-said">…</p></div>
+      <div class="line you"><span class="who">${T.chat.you}</span><p id="you-said"></p></div>
+      <div id="status-strip"><div id="status-dot"></div><div id="status-text"></div></div>
+      <button type="button" id="change">${T.chat.change}</button>
+    </section>
+  </main>`;
 
-setupButton(document.querySelector("#counter")!);
+const $ = (id: string) => document.getElementById(id)!;
+
+/** Why a new conversation cannot start right now, or null. */
+function blocked(): string | null {
+  const view = speechView();
+  if (view === "error" || view === "stopped") return T.waiting.broken;
+  if (!dmActor.getSnapshot().matches("Intake")) return T.waiting.notReady;
+  return view === "idle" ? null : T.waiting.busy;
+}
+
+const form = createIntakeForm($("form"), { blocked, onDone: (intake) => dmActor.send({ type: "INTAKE_DONE", intake }) });
+form.open("name");
+
+$("change").addEventListener("click", () => {
+  dmActor.send({ type: "CHANGE_SETTINGS" });
+  form.open("tonight");
+});
+
+let inChat = false;
+onChange(() => {
+  const snap = dmActor.getSnapshot();
+  const chatting = snap.matches("Main");
+  if (chatting !== inChat) {
+    inChat = chatting;
+    $("form").hidden = chatting;
+    $("chat").hidden = !chatting;
+  }
+  form.refresh();
+  if (!chatting) return;
+
+  const { is, jakeSaid, lastUtterance } = snap.context;
+  if (is) {
+    const { profile, tonight } = is.intake;
+    $("tonight-summary").textContent = [
+      profile.name ?? "Guest",
+      T.tonight.companies[tonight.company],
+      T.tonight.rating(certificationFor(tonight.youngestAge)),
+      tonight.maxMinutes ? T.tonight.minutes(tonight.maxMinutes) : T.tonight.noLimit,
+    ].join(" · ");
+  }
+  $("jake-said").textContent = jakeSaid ?? "…";
+  $("you-said").textContent = lastUtterance ?? "";
+  const view = speechView();
+  $("status-dot").className = view;
+  $("status-text").textContent = T.chat.status[view] ?? view;
+});

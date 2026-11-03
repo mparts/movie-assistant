@@ -20,7 +20,7 @@ const openingByCompany: Record<Company, string> = {
 export const utterances = {
   /** The first line, from the settings form (no LLM). */
   opening: ({ profile, tonight }: Intake) =>
-    `Hey ${profile.name}! I’m Jake. ${openingByCompany[tonight.company]}`,
+    `Hey${profile.name ? ` ${profile.name}` : ""}! I’m Jake. ${openingByCompany[tonight.company]}`,
   noInput: "Still there? Take your time — what are you thinking?",
   /** The LLM failed or was unreachable. */
   systemError: "Sorry, I lost my train of thought for a second. Could you say that again?",
@@ -112,4 +112,61 @@ export const respondModes = {
     "WRAP-UP MODE: The person has just accepted the movie named in \"acceptedMovie\". In one or two warm sentences, confirm the choice (one short, true reason from its entry is fine) and wish them a good watch. Do NOT suggest another movie and do NOT ask a question. Output recommend:null.",
   explore:
     "EXPLORATION MODE: Do not recommend, name, or hint at any specific movie. Respond empathetically to the latest user message, then ask exactly one insightful, natural follow-up question about their desired experience, preferences, or constraints. Avoid repeating an earlier question. The candidate list is intentionally unavailable. Output recommend:null.",
+};
+
+/** Everything the settings form (Phase 1, browser) says. */
+export const formText = {
+  title: "JAKE",
+  tagline: "your movie night sidekick",
+  name: {
+    heading: "First things first",
+    question: "What should Jake call you?",
+    placeholder: "Your name",
+    next: "Next",
+    guest: "Just browsing (guest)",
+    guestNote: "Guests start fresh and nothing is saved.",
+  },
+  welcome: {
+    heading: (name: string) => `Welcome back, ${name}!`,
+    question: "Same setup as last time?",
+    use: "Use these settings",
+    change: "Change them",
+    notMe: "Not me",
+  },
+  profile: {
+    heading: "A bit about you",
+    age: "Your age",
+    country: "Where are you watching?",
+    platforms: "What can you stream?",
+    platformsHint: "Pick all you have. Only movies included in these subscriptions are suggested.",
+    noStream: "I don't stream",
+    loading: "Loading…",
+    loadFailed: "Couldn't reach the movie database for this list.",
+    continueWithout: "Continue without platforms",
+    attribution: "Streaming data by JustWatch",
+    next: "Next",
+  },
+  tonight: {
+    heading: "Tonight",
+    time: "How much time do you have?",
+    noLimit: "No limit",
+    minutes: (m: number) => `${Math.floor(m / 60)}h${m % 60 ? ` ${m % 60}m` : ""} or less`,
+    avoid: "Anything you'd rather skip?",
+    company: "Who's watching?",
+    companies: { alone: "Just me", relationship: "Me + partner", family: "Family", friends: "Friends" },
+    youngest: "Youngest person watching",
+    age: (a: number) => (a >= 18 ? "18+" : `${a} years`),
+    rating: (cert: string | undefined) => (cert ? `${cert} movies and below` : "any rating"),
+    go: "Let's go",
+    pickCompany: "Who's watching?",
+  },
+  back: "Back",
+  /** Why "Let's go" is not available yet. */
+  waiting: { notReady: "Warming up the mic…", busy: "Jake is finishing his sentence…", broken: "Speech isn't working (check the Azure key and reload)" },
+  chat: {
+    change: "Change tonight's settings",
+    you: "You",
+    jake: "Jake",
+    status: { speaking: "Jake is talking", recognising: "Listening…", idle: "Thinking…", "not-ready": "Getting ready…", error: "Speech error" } as Record<string, string>,
+  },
 };

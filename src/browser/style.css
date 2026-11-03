@@ -1,96 +1,110 @@
+/* Look carried over from mono-vowel: dark surfaces, Bebas Neue headings, IBM Plex Mono text, pulsing status dot. */
+@import url("https://fonts.googleapis.com/css2?family=Bebas+Neue&family=IBM+Plex+Mono:wght@400;500&display=swap");
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
 :root {
-  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  --bg: #0a0a0a;
+  --surface: #111111;
+  --surface-2: #1a1a1a;
+  --border: #2a2a2a;
+  --text: #e8e8e8;
+  --text-dim: #555;
+  --text-muted: #888;
+  --accent: #ffb800;
+  --accent-green: #00ff87;
+  --accent-blue: #3c8fff;
+  --accent-red: #ff3c3c;
+  --font-display: "Bebas Neue", Impact, sans-serif;
+  --font-mono: "IBM Plex Mono", "Courier New", monospace;
+}
+
+html, body {
+  min-height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 14px;
   line-height: 1.5;
-  font-weight: 400;
-
-  color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
-
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
 }
 
-a {
-  font-weight: 500;
-  color: #646cff;
-  text-decoration: inherit;
-}
-a:hover {
-  color: #535bf2;
-}
+#app { max-width: 640px; margin: 0 auto; padding: 24px 16px 48px; }
 
-body {
-  margin: 0;
+header { display: flex; align-items: baseline; gap: 12px; margin-bottom: 24px; }
+header .title { font-family: var(--font-display); font-size: 40px; letter-spacing: 6px; color: var(--accent); }
+header .tagline { color: var(--text-muted); letter-spacing: 1px; }
+
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  padding: 24px;
   display: flex;
-  place-items: center;
-  min-width: 320px;
-  min-height: 100vh;
+  flex-direction: column;
+  gap: 12px;
 }
+.panel[hidden], [hidden] { display: none !important; }
 
-h1 {
-  font-size: 3.2em;
-  line-height: 1.1;
-}
+h2 { font-family: var(--font-display); font-size: 28px; letter-spacing: 3px; font-weight: 400; }
+.q { color: var(--text); margin-top: 8px; }
+.q b { color: var(--accent); font-weight: 500; }
+.hint, .attribution { color: var(--text-muted); font-size: 12px; }
+.attribution { text-align: right; }
+.warn { color: var(--accent-red); font-size: 12px; min-height: 1em; }
+.summary { color: var(--text-muted); letter-spacing: 1px; }
 
-#app {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 2rem;
-  text-align: center;
+input[type="text"], select {
+  background: var(--surface-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  font: inherit;
+  padding: 10px 12px;
+  width: 100%;
 }
-
-.logo {
-  height: 6em;
-  padding: 1.5em;
-  will-change: filter;
-  transition: filter 300ms;
-}
-.logo:hover {
-  filter: drop-shadow(0 0 2em #646cffaa);
-}
-.logo.vanilla:hover {
-  filter: drop-shadow(0 0 2em #3178c6aa);
-}
-
-.card {
-  padding: 2em;
-}
-
-.read-the-docs {
-  color: #888;
-}
+input[type="text"]:focus, select:focus { outline: none; border-color: var(--accent); }
+input[type="range"] { width: 100%; accent-color: var(--accent); }
+input[type="range"]:disabled { opacity: 0.3; }
+.check { display: flex; gap: 8px; align-items: center; color: var(--text-muted); cursor: pointer; }
+.check input { accent-color: var(--accent); }
 
 button {
-  border-radius: 8px;
-  border: 1px solid transparent;
-  padding: 0.6em 1.2em;
-  font-size: 1em;
-  font-weight: 500;
-  font-family: inherit;
-  background-color: #1a1a1a;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font: inherit;
+  padding: 10px 16px;
   cursor: pointer;
-  transition: border-color 0.25s;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
 }
-button:hover {
-  border-color: #646cff;
+button:hover:not(:disabled) { border-color: var(--text-muted); }
+button:disabled { cursor: default; opacity: 0.5; }
+button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button.primary {
+  font-family: var(--font-display);
+  font-size: 20px;
+  letter-spacing: 3px;
+  border-color: var(--accent);
+  color: var(--accent);
 }
-button:focus,
-button:focus-visible {
-  outline: 4px auto -webkit-focus-ring-color;
-}
+.row { display: flex; flex-wrap: wrap; gap: 8px; justify-content: space-between; margin-top: 12px; }
 
-@media (prefers-color-scheme: light) {
-  :root {
-    color: #213547;
-    background-color: #ffffff;
-  }
-  a:hover {
-    color: #747bff;
-  }
-  button {
-    background-color: #f9f9f9;
-  }
-}
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; font-size: 13px; }
+.chip img { width: 20px; height: 20px; border-radius: 4px; }
+.chip.on { border-color: var(--accent); color: var(--accent); background: #ffb80014; }
+
+/* chat */
+.line { display: flex; gap: 12px; align-items: flex-start; }
+.line .who { font-family: var(--font-display); letter-spacing: 2px; font-size: 18px; min-width: 48px; color: var(--text-muted); }
+.line.jake .who { color: var(--accent); }
+.line p { flex: 1; }
+.line.you p { color: var(--text-muted); }
+
+#status-strip { display: flex; align-items: center; gap: 10px; border-top: 1px solid var(--border); padding-top: 12px; }
+#status-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--text-dim); }
+#status-dot.recognising { background: var(--accent-green); animation: pulse 1.2s ease-in-out infinite; }
+#status-dot.speaking { background: var(--accent-blue); animation: pulse 0.8s ease-in-out infinite; }
+#status-dot.error { background: var(--accent-red); }
+#status-text { color: var(--text-muted); letter-spacing: 1px; font-size: 12px; }
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+#change { align-self: flex-start; font-size: 12px; }

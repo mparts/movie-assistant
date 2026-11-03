@@ -75,7 +75,7 @@ export function stateSummary(is: IS): Record<string, unknown> {
   const o: Record<string, unknown> = {
     // From the settings form: fixed for this conversation, never asked again.
     tonight: {
-      name: profile.name,
+      ...(profile.name && { name: profile.name }),
       company: tonight.company,
       youngestViewerAge: tonight.youngestAge,
       ...(tonight.maxMinutes !== undefined && { timeLimitMinutes: tonight.maxMinutes }),
