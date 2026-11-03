@@ -35,6 +35,13 @@ export const settings = {
     respond: { temperature: 0.7, maxTokens: 1200, prefer: undefined as string | undefined },
   },
 
+  /** On-disk cache of movie-description vectors (Node scripts only; the browser keeps them in memory). */
+  embeddingCache: {
+    path: ".cache/embeddings.json",
+    /** Oldest vectors are dropped beyond this (about 6-8 KB each as JSON). */
+    maxEntries: 5000,
+  },
+
   search: {
     language: "en-US",
     sortBy: "popularity.desc",

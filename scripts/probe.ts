@@ -4,11 +4,15 @@ import { initialIS } from "../src/core/state";
 import { rank } from "../src/core/ranking";
 import { understand } from "../src/dialogue/nlu";
 import { respond } from "../src/dialogue/respond";
+import { settings } from "../src/config/settings";
 import { createClients } from "../src/services";
+import { createFileStore } from "../src/services/embeddingStore";
 import { loadEnv } from "./env";
 
 const env = loadEnv();
-const { tmdb, llm, embedder } = createClients("upstream", env);
+const { tmdb, llm, embedder } = createClients("upstream", env, {
+  embeddingStore: createFileStore(settings.embeddingCache.path, settings.embeddingCache.maxEntries),
+});
 const section = (s: string) => console.log(`\n=== ${s}`);
 
 async function main() {

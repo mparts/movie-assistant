@@ -12,3 +12,6 @@ dist-ssr
 
 # personal working notes
 todo.md
+
+# on-disk caches (embeddings)
+.cache/

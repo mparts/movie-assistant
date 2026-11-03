@@ -36,6 +36,7 @@ npm test
 ```
 
 University Ollama: `ssh -f -N -L 11435:127.0.0.1:11434 mltgpu-2`. Disable a backend with `enabled: false` in `llmBackends`; turn embeddings off with `embeddings.enabled`.
+`chat` and `probe` cache movie-description vectors in `.cache/embeddings.json` (git-ignored; path and size in `settings.embeddingCache`). Delete the file to reset it.
 
 ## Flow
 

@@ -27,11 +27,44 @@ export interface EmbedderOptions {
   documentPrefix: string;
   batchSize: number;
   timeoutMs: number;
+  /** Where movie-description vectors survive restarts. Without one, the cache lives only in memory. */
+  store?: EmbeddingStore;
 }
 
-/** One instance keeps an in-memory cache across conversation turns. */
+/** Persistent storage for description vectors. Both methods must never throw: a bad cache is an empty cache. */
+export interface EmbeddingStore {
+  /** Vectors saved earlier for this model, by key. Insertion order is age order (oldest first). */
+  load(model: string): Map<string, number[]>;
+  save(model: string, entries: Map<string, number[]>): void;
+}
+
+/** Small non-cryptographic 53-bit hash (works in browser and Node): short, stable cache keys for long texts. */
+function hash53(text: string): string {
+  let h1 = 0xdeadbeef, h2 = 0x41c6ce57;
+  for (let i = 0; i < text.length; i++) {
+    const c = text.charCodeAt(i);
+    h1 = Math.imul(h1 ^ c, 2654435761);
+    h2 = Math.imul(h2 ^ c, 1597334677);
+  }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36);
+}
+
+/** One instance keeps an in-memory cache across turns; description vectors also go to the store, if any. */
 export function createEmbedder(o: EmbedderOptions): Embedder {
   const cache = new Map<string, number[]>();
+  /** Keys that belong in the store (descriptions repeat across sessions; the per-turn taste query does not). */
+  const persisted = new Set<string>();
+  let loaded = false;
+  function loadStore() {
+    if (loaded) return;
+    loaded = true;
+    for (const [key, vec] of o.store?.load(o.model) ?? []) {
+      cache.set(key, vec);
+      persisted.add(key);
+    }
+  }
 
   async function embed(texts: string[]): Promise<number[][]> {
     const ctrl = new AbortController();
@@ -56,24 +89,38 @@ export function createEmbedder(o: EmbedderOptions): Embedder {
     }
   }
 
-  /** Embeds only texts not seen before, in batches. */
-  async function vectors(texts: string[]): Promise<number[][]> {
-    const missing = [...new Set(texts)].filter((t) => !cache.has(t));
+  interface Item { key: string; text: string; persist: boolean }
+
+  /** Embeds only items not seen before, in batches; saves to the store when new descriptions were added. */
+  async function vectors(items: Item[]): Promise<number[][]> {
+    loadStore();
+    const seen = new Set<string>();
+    const missing = items.filter((i) => !cache.has(i.key) && !seen.has(i.key) && !!seen.add(i.key));
     for (let i = 0; i < missing.length; i += o.batchSize) {
       const batch = missing.slice(i, i + o.batchSize);
-      (await embed(batch)).forEach((v, j) => cache.set(batch[j], v));
+      (await embed(batch.map((b) => b.text))).forEach((v, j) => {
+        cache.set(batch[j].key, v);
+        if (batch[j].persist) persisted.add(batch[j].key);
+      });
     }
-    if (isDebug()) console.log(`[embed] ${missing.length} new / ${texts.length} texts`);
-    return texts.map((t) => cache.get(t)!);
+    if (o.store && missing.some((m) => m.persist)) {
+      o.store.save(o.model, new Map([...persisted].map((k) => [k, cache.get(k)!])));
+    }
+    if (isDebug()) console.log(`[embed] ${missing.length} new / ${items.length} texts`);
+    return items.map((i) => cache.get(i.key)!);
   }
 
   return {
     async score(profile, movies) {
       const withText = movies.filter((m) => m.overview.trim());
       if (!profile.trim() || !withText.length) return new Map();
+      const queryText = o.queryPrefix + profile.trim();
       const [query, ...docs] = await vectors([
-        o.queryPrefix + profile.trim(),
-        ...withText.map((m) => o.documentPrefix + m.overview.trim()),
+        { key: `q:${queryText}`, text: queryText, persist: false },
+        ...withText.map((m) => {
+          const text = o.documentPrefix + m.overview.trim();
+          return { key: `d:${hash53(text)}`, text, persist: true };
+        }),
       ]);
       return new Map(withText.map((m, i) => [m.id, cosine01(query, docs[i])]));
     },
