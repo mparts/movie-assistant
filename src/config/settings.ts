@@ -42,6 +42,12 @@ export const settings = {
     maxEntries: 5000,
   },
 
+  /** On-disk cache of movie runtimes (Node scripts only). About 15 bytes per entry. */
+  runtimeCache: {
+    path: ".cache/runtimes.json",
+    maxEntries: 20000,
+  },
+
   search: {
     language: "en-US",
     sortBy: "popularity.desc",

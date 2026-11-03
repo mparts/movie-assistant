@@ -13,11 +13,13 @@ import { dme } from "../src/dialogue/dme";
 import { nlg } from "../src/dialogue/nlg";
 import { createClients } from "../src/services";
 import { createFileStore } from "../src/services/embeddingStore";
+import { createRuntimeFileStore } from "../src/services/runtimeStore";
 import { loadEnv } from "./env";
 
 const env = loadEnv();
 const clients = createClients("upstream", env, {
   embeddingStore: createFileStore(settings.embeddingCache.path, settings.embeddingCache.maxEntries),
+  runtimeStore: createRuntimeFileStore(settings.runtimeCache.path, settings.runtimeCache.maxEntries),
 });
 console.log(`LLM backends (in order): ${llmBackends.filter((b) => b.enabled !== false).map((b) => `${b.name}:${b.model}`).join(" → ")}`);
 if (!env.DEBUG) console.info = () => {}; // hide per-rule logs unless DEBUG=1

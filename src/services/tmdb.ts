@@ -1,4 +1,5 @@
 import type { Movie, SearchCriteria, TmdbClient } from "../core/types";
+import { isDebug } from "../core/util";
 
 export interface TmdbOptions {
   baseUrl: string;
@@ -14,6 +15,14 @@ export interface TmdbOptions {
   /** Wait after a 429, and how many times to retry it before failing. */
   retryDelayMs: number;
   rateLimitRetries: number;
+  /** Where runtimes survive restarts. Without one, they are cached only in memory. */
+  store?: RuntimeStore;
+}
+
+/** Persistent storage for runtimes. Both methods must never throw: a bad cache is an empty cache. */
+export interface RuntimeStore {
+  load(): Map<number, number>;
+  save(entries: Map<number, number>): void;
 }
 
 type DiscoverOptions = Pick<TmdbOptions, "language" | "sortBy" | "minVotes">;
@@ -59,6 +68,7 @@ export function createTmdb(o: TmdbOptions): TmdbClient {
   // (fixed for the session, so repeated searches stay consistent) varies the pool between conversations.
   const pageOrder = shuffle(Array.from({ length: o.pageWindow }, (_, i) => i + 1));
   const runtimes = new Map<number, number>();
+  let runtimesLoaded = false;
   const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
   async function get(path: string, params: Record<string, string> = {}): Promise<any> {
@@ -100,6 +110,10 @@ export function createTmdb(o: TmdbOptions): TmdbClient {
 
   /** Discover results carry no runtime; look them up (concurrently, cached) so the assistant never has to guess. */
   async function fillRuntimes(movies: Movie[]) {
+    if (!runtimesLoaded) {
+      runtimesLoaded = true;
+      for (const [id, minutes] of o.store?.load() ?? []) runtimes.set(id, minutes);
+    }
     const todo = movies.filter((m) => !runtimes.has(m.id));
     let next = 0;
     await Promise.all(
@@ -119,6 +133,9 @@ export function createTmdb(o: TmdbOptions): TmdbClient {
       const r = runtimes.get(m.id);
       if (r) m.runtime = r;
     }
+    // Failed lookups are not in `runtimes`, so they are neither saved nor remembered: they get retried next time.
+    if (o.store && todo.some((m) => runtimes.has(m.id))) o.store.save(runtimes);
+    if (isDebug()) console.log(`[tmdb] runtimes: ${todo.length} looked up / ${movies.length} movies`);
   }
 
   return {

@@ -7,11 +7,13 @@ import { respond } from "../src/dialogue/respond";
 import { settings } from "../src/config/settings";
 import { createClients } from "../src/services";
 import { createFileStore } from "../src/services/embeddingStore";
+import { createRuntimeFileStore } from "../src/services/runtimeStore";
 import { loadEnv } from "./env";
 
 const env = loadEnv();
 const { tmdb, llm, embedder } = createClients("upstream", env, {
   embeddingStore: createFileStore(settings.embeddingCache.path, settings.embeddingCache.maxEntries),
+  runtimeStore: createRuntimeFileStore(settings.runtimeCache.path, settings.runtimeCache.maxEntries),
 });
 const section = (s: string) => console.log(`\n=== ${s}`);
 
