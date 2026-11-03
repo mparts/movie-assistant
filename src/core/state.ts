@@ -1,9 +1,12 @@
 /** The information state: its initial value and read-only views of it. */
 import { settings } from "../config/settings";
+import { certificationFor, Intake } from "./intake";
 import { InformationState as IS, SearchCriteria } from "./types";
 import { last } from "./util";
 
-export const initialIS = (): IS => ({
+/** Every conversation starts from Phase 1's facts (the form, or a profile file in the typed chat). */
+export const initialIS = (intake: Intake): IS => ({
+  intake,
   next_moves: [],
   private: { agenda: [], notices: [] },
   shared: {},
@@ -36,7 +39,7 @@ export const hasSignal = (is: IS): boolean => {
 };
 
 export function criteriaFromIS(is: IS, page: number = is.search.page): SearchCriteria {
-  return {
+  const criteria: SearchCriteria = {
     // Named genres are combined (AND); with none named, the mood/liked-movie genres are alternatives (OR).
     genres: is.prefs.required.length ? is.prefs.required : is.prefs.genres,
     matchAll: is.prefs.required.length > 0,
@@ -47,12 +50,39 @@ export function criteriaFromIS(is: IS, page: number = is.search.page): SearchCri
     language: is.constraints.language,
     page,
   };
+  return narrowByIntake(criteria, is.intake);
+}
+
+/** Phase 1 limits on top of the chat's own: the chat can only narrow them, never widen them. */
+function narrowByIntake(c: SearchCriteria, { profile, tonight }: Intake): SearchCriteria {
+  const limit = tonight.maxMinutes;
+  const max = limit === undefined ? c.runtime.max : Math.min(limit, c.runtime.max ?? limit);
+  // A minimum above the Phase 1 limit would leave nothing: drop the minimum instead.
+  const min = max !== undefined && c.runtime.min !== undefined && c.runtime.min > max ? undefined : c.runtime.min;
+  return {
+    ...c,
+    excludeGenres: [...new Set([...c.excludeGenres, ...tonight.avoidGenres])],
+    runtime: { ...(min !== undefined && { min }), ...(max !== undefined && { max }) },
+    certificationLte: certificationFor(tonight.youngestAge),
+    watch: profile.platforms.length ? { region: profile.country, providers: profile.platforms } : undefined,
+  };
 }
 
 /** Compact view of what the system currently believes, for the LLM prompts. Empty fields are omitted. */
 export function stateSummary(is: IS): Record<string, unknown> {
   const { runtime, year, rating, language } = is.constraints;
-  const o: Record<string, unknown> = {};
+  const { profile, tonight } = is.intake;
+  const o: Record<string, unknown> = {
+    // From the settings form: fixed for this conversation, never asked again.
+    tonight: {
+      name: profile.name,
+      company: tonight.company,
+      youngestViewerAge: tonight.youngestAge,
+      ...(tonight.maxMinutes !== undefined && { timeLimitMinutes: tonight.maxMinutes }),
+      ...(tonight.avoidGenres.length && { avoidGenres: tonight.avoidGenres }),
+      streamingServices: profile.platforms.length || "none (any movie)",
+    },
+  };
   if (is.prefs.genres.length) o.wantedGenres = is.prefs.genres;
   if (is.prefs.seeds.length) o.likesMoviesLike = is.prefs.seeds.map((m) => m.title);
   if (is.vibe.length) o.vibe = is.vibe;

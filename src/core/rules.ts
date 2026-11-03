@@ -153,7 +153,7 @@ export const rules: Record<string, Rule> = {
   integrate_restart: ({ is }) =>
     usr(is, "restart").length
       ? () => ({
-          ...initialIS(),
+          ...initialIS(is.intake),
           history: is.history,
           shared: is.shared,
           private: { agenda: [], notices: [notices.restarted] },

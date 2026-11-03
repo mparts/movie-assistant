@@ -1,5 +1,6 @@
 import { SpeechStateExternalEvent } from "speechstate";
 import type { Embedder } from "../services/embeddings";
+import type { Intake } from "./intake";
 
 /** A movie as the dialogue sees it. Genres are TMDB genre *names*; only the TMDB client knows ids. */
 export interface Movie {
@@ -90,6 +91,8 @@ export interface InformationState {
   recommendStreak: number;
   /** Id of the suggested movie the user accepted. Cleared when they say anything substantive afterwards. */
   accepted?: number;
+  /** Phase 1 facts, set once at the start; no move changes them. */
+  intake: Intake;
 
   /** `page` counts batches of TMDB pages, not single pages. `total`: TMDB's result count for the last search. */
   search: { status: "idle" | "dirty" | "failed"; page: number; noMore: boolean; total?: number };
@@ -104,6 +107,10 @@ export interface SearchCriteria {
   year: Range;
   rating?: number;
   language?: string;
+  /** US certification ceiling ("PG"), from the youngest viewer. */
+  certificationLte?: string;
+  /** Subscription platforms (TMDB provider ids) in `region`; any of them will do. */
+  watch?: { region: string; providers: number[] };
   page: number;
 }
 

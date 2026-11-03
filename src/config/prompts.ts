@@ -1,6 +1,7 @@
 /**
  * Every prompt and every pre-written line the assistant speaks. Edit wording here; no text lives in code.
  */
+import type { Company, Intake } from "../core/intake";
 import { GENRES } from "../core/lexicon";
 import { settings } from "./settings";
 
@@ -8,9 +9,18 @@ const thisYear = new Date().getFullYear();
 /** The earliest year that still counts as "recent". */
 const recentFrom = thisYear - settings.adjust.recentYears;
 
+const openingByCompany: Record<Company, string> = {
+  alone: "A movie night just for you, nice. What are you in the mood for?",
+  relationship: "Movie night for two, love it. What are you both in the mood for?",
+  family: "Movie night with the family, love it. What are you all in the mood for?",
+  friends: "Movie night with friends, nice. What kind of night are you all after?",
+};
+
 /** Fixed lines (no LLM involved). */
 export const utterances = {
-  opening: "Hey! I’m Jake, your movie companion. How are you feeling today?",
+  /** The first line, from the settings form (no LLM). */
+  opening: ({ profile, tonight }: Intake) =>
+    `Hey ${profile.name}! I’m Jake. ${openingByCompany[tonight.company]}`,
   noInput: "Still there? Take your time — what are you thinking?",
   /** The LLM failed or was unreachable. */
   systemError: "Sorry, I lost my train of thought for a second. Could you say that again?",
@@ -80,7 +90,8 @@ Example: "That one's a slow burn, but it's got a great creepy streak. Does that 
 
 How to behave:
 - Have a real conversation. React to what they just said first. Be curious about them, not about a checklist.
-- Gradually get a feel for their taste: what they've enjoyed lately, their mood, who they're watching with, how much time they have. Ask at most ONE light question per turn, and only when it helps. Never ask for something you already know (see "whatWeKnow"). Never interrogate.
+- Gradually get a feel for their taste: what they've enjoyed lately, their mood, the kind of story they want. Ask at most ONE light question per turn, and only when it helps. Never ask for something you already know (see "whatWeKnow"). Never interrogate.
+- "whatWeKnow.tonight" comes from the settings they filled in (their name, who is watching, the youngest viewer's age, time limit, genres to avoid, streaming services). It is already applied to the search, so every candidate already suits the youngest viewer and fits the time limit: never ask about any of it (not even "kid-friendly or grown-up?"). If they want to change it, tell them to change tonight's settings.
 - "tasteProfile" summarizes the user's current positive taste signals. Use it to judge which movie descriptions fit their desired experience, not just genre overlap. Hard constraints are already applied by the search.
 - You don't need to know everything. Once you have a real feel for their taste (a mood, a kind of movie, a movie they love), suggest ONE movie from "candidates" and say in a sentence why it fits what they told you. Choose the candidate whose description best matches their mood and taste, not simply the first one. A time limit alone is not taste: if that's all you know, ask what they're in the mood for instead.
 - If they react to a suggestion (already seen it, not feeling it, sounds good), respond naturally and then adjust or offer a different candidate. If they say yes, wrap up warmly and briefly.

@@ -1,0 +1,4 @@
+{
+  "profile": { "name": "Sam", "age": 38, "country": "NL", "platforms": [8, 337, 119] },
+  "tonight": { "maxMinutes": 100, "avoidGenres": ["Horror"], "company": "family", "youngestAge": 8 }
+}

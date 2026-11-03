@@ -1,6 +1,9 @@
+import { readdirSync, readFileSync } from "node:fs";
 import { describe, expect, test } from "vitest";
 import { rank } from "../src/core/ranking";
 import { criteriaFromIS, initialIS } from "../src/core/state";
+import { freshIS } from "./fixtures";
+import { parseIntake } from "../src/core/intake";
 import { recommendationReadiness } from "../src/core/readiness";
 import type { Movie } from "../src/core/types";
 
@@ -8,7 +11,7 @@ const movie = (id: number, genres: string[]): Movie => ({ id, title: `M${id}`, g
 
 describe("rank", () => {
   const is = () => {
-    const s = initialIS();
+    const s = freshIS();
     s.prefs.genres = ["Comedy", "Crime"];
     return s;
   };
@@ -32,7 +35,7 @@ describe("information state", () => {
 
 
   test("named genres are searched together; without them, mood genres are alternatives", () => {
-    const s = initialIS();
+    const s = freshIS();
     s.prefs.genres = ["Romance", "Comedy", "Action", "Thriller"];
     s.prefs.required = ["Romance", "Comedy"];
     expect(criteriaFromIS(s)).toMatchObject({ genres: ["Romance", "Comedy"], matchAll: true });
@@ -41,16 +44,46 @@ describe("information state", () => {
   });
 });
 
+describe("intake (Phase 1)", () => {
+  test("every sample in profiles/ follows the contract", () => {
+    for (const f of readdirSync("profiles")) expect(() => parseIntake(JSON.parse(readFileSync(`profiles/${f}`, "utf8")))).not.toThrow();
+  });
+
+  const sample = {
+    profile: { name: "Sam", age: 38, country: "NL", platforms: [8, 337] },
+    tonight: { maxMinutes: 100, avoidGenres: ["Horror"], company: "family", youngestAge: 8 },
+  };
+
+  test("parseIntake accepts the contract, rejects bad input, and uses the user's age when watching alone", () => {
+    expect(parseIntake(sample)).toEqual(sample);
+    expect(() => parseIntake({ ...sample, tonight: { ...sample.tonight, avoidGenres: ["Scary"] } })).toThrow(/avoidGenres/);
+    expect(parseIntake({ ...sample, tonight: { ...sample.tonight, company: "alone" } }).tonight.youngestAge).toBe(38);
+  });
+
+  test("the chat can only narrow Phase 1: a longer limit is capped, avoided genres are added", () => {
+    const s = initialIS(parseIntake(sample));
+    s.constraints.runtime = { min: 110, max: 140 };
+    s.dislikes.genres = ["War"];
+    expect(criteriaFromIS(s)).toMatchObject({
+      runtime: { max: 100 }, excludeGenres: ["War", "Horror"], certificationLte: "PG",
+      watch: { region: "NL", providers: [8, 337] },
+    });
+    expect(criteriaFromIS(s).runtime.min).toBeUndefined();
+    s.constraints.runtime = { max: 80 };
+    expect(criteriaFromIS(s).runtime.max).toBe(80);
+  });
+});
+
 describe("readiness", () => {
 
   test("taste + enough turns and signals is ready; \"just pick\" skips the wait", () => {
-    const s = initialIS();
+    const s = freshIS();
     s.prefs.genres = ["Comedy"];
     expect(recommendationReadiness(s).ready).toBe(false);
     s.readiness = { meaningfulTurns: 2, evidence: ["genre:Comedy", "runtime"] };
     expect(recommendationReadiness(s).ready).toBe(true);
 
-    const t = initialIS();
+    const t = freshIS();
     t.prefs.genres = ["Comedy"];
     t.history = [{ speaker: "usr", text: "just pick one" }];
     expect(recommendationReadiness(t).ready).toBe(true);

@@ -2,14 +2,14 @@ import { describe, expect, test } from "vitest";
 import { notices } from "../src/config/prompts";
 import { settings } from "../src/config/settings";
 import { rules } from "../src/core/rules";
-import { initialIS } from "../src/core/state";
+import { freshIS } from "./fixtures";
 import type { InformationState as IS, Move, Movie } from "../src/core/types";
 
 const movie = (id: number, title: string): Movie => ({ id, title, genres: [], rating: 7, votes: 100, overview: "" });
 
 /** A state whose latest utterance is the user's, carrying these moves. */
 const heard = (moves: Move[], setup: (is: IS) => void = () => {}): IS => {
-  const is = initialIS();
+  const is = freshIS();
   is.shared = { lu: { speaker: "usr", moves } };
   setup(is);
   return is;
@@ -60,7 +60,7 @@ describe("rules: preferences and search", () => {
 
 describe("rules: suggestion streak", () => {
   test("any feedback from the user ends a run of suggestions; silence or a vague reply does not", () => {
-    const is = initialIS();
+    const is = freshIS();
     is.recommendStreak = 2;
     const after = (moves: Move[]) => rules.get_latest_move({ is, latest_moves: moves, latest_speaker: "usr", latest_text: "x" })!().recommendStreak;
     expect(after([{ type: "seen", title: "Sing 2" }])).toBe(0);

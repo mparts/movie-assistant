@@ -1,6 +1,8 @@
 /** Checks the real services and prints what came back. Run: npm run probe */
 import { embeddings as embCfg, llmBackends, services, authHeaders } from "../src/config/services";
 import { initialIS } from "../src/core/state";
+import { parseIntake } from "../src/core/intake";
+import sampleProfile from "../profiles/solo.json";
 import { rank } from "../src/core/ranking";
 import { understand } from "../src/dialogue/nlu";
 import { respond } from "../src/dialogue/respond";
@@ -37,7 +39,7 @@ async function main() {
   } else console.log("disabled");
 
   section(`LLM (${llmBackends.map((b) => b.name).join(" → ")})`);
-  const is = initialIS();
+  const is = initialIS(parseIntake(sampleProfile));
   is.prefs.genres = ["Comedy"];
   is.constraints.runtime = { max: 110 };
   is.vibe = ["light"];

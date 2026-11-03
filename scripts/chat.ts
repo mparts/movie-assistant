@@ -1,9 +1,13 @@
 /**
  * Typed chat through the REAL pipeline (LLM + TMDB + dialogue manager), no speech.
  * Run: npm run chat      (DEBUG=1 npm run chat  to dump the information state each rule)
+ * It first asks for tonight's settings: one of the files in profiles/ (the same JSON the browser form produces).
  * Commands: /state shows what the assistant has noted about you; /quit exits.
  */
-import { createInterface } from "node:readline";
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import { createInterface } from "node:readline/promises";
+import { certificationFor, Intake, parseIntake } from "../src/core/intake";
 import { createActor, sendTo, setup } from "xstate";
 import { llmBackends } from "../src/config/services";
 import { settings } from "../src/config/settings";
@@ -34,6 +38,34 @@ if (!env.DEBUG) console.info = () => {}; // hide per-rule logs unless DEBUG=1
 const rl = createInterface({ input: process.stdin, output: process.stdout });
 let turnStart = Date.now();
 
+/** Phase 1 in the terminal: pick a settings file from profiles/ (stands in for the browser form). Asks again on a bad file. */
+async function pickIntake(): Promise<Intake> {
+  const dir = "profiles";
+  const files = readdirSync(dir).filter((f) => f.endsWith(".json")).sort();
+  if (!files.length) throw new Error(`No profiles in ${dir}/`);
+  files.forEach((f, i) => console.log(`  ${i + 1}. ${f.replace(/\.json$/, "")}`));
+  for (;;) {
+    const answer = (await rl.question("Who is watching tonight? (number) ")).trim();
+    const file = files[Number(answer) - 1];
+    if (!file) continue;
+    try {
+      return parseIntake(JSON.parse(readFileSync(join(dir, file), "utf8")));
+    } catch (e) {
+      console.log(`  ${file}: ${(e as Error).message}`);
+    }
+  }
+}
+
+const intake = await pickIntake();
+const { profile, tonight } = intake;
+const cert = certificationFor(tonight.youngestAge);
+console.log(
+  `Profile: ${profile.name} · ${profile.country} · ${tonight.company}, youngest ${tonight.youngestAge}${cert ? ` → ${cert}` : ""}` +
+    ` · ${tonight.maxMinutes ? `≤${tonight.maxMinutes} min` : "no time limit"}` +
+    ` · ${profile.platforms.length ? `platforms ${profile.platforms.join("|")}` : "any platform"}` +
+    (tonight.avoidGenres.length ? ` · avoid ${tonight.avoidGenres.join(", ")}` : "")
+);
+
 const machine = setup({
   types: {} as { events: NextMovesEvent | { type: "USER"; text: string } },
   actors: { dme },
@@ -41,7 +73,7 @@ const machine = setup({
   invoke: {
     src: "dme",
     id: "dme",
-    input: ({ self }): DMEContext => ({ parentRef: self, ...clients, is: initialIS() }),
+    input: ({ self }): DMEContext => ({ parentRef: self, ...clients, is: initialIS(intake) }),
   },
   on: {
     USER: {

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { settings } from "../src/config/settings";
 import { movieScore, rank, rankWithSemantics } from "../src/core/ranking";
-import { initialIS } from "../src/core/state";
+import { freshIS } from "./fixtures";
 import type { Movie } from "../src/core/types";
 
 const movie = (id: number, over: Partial<Movie> = {}): Movie => ({
@@ -11,7 +11,7 @@ const movie = (id: number, over: Partial<Movie> = {}): Movie => ({
 describe("movieScore factors", () => {
   test("a high rating from very few votes is pulled toward the average", () => {
     const { votes: priorVotes, mean } = settings.ranking.ratingPrior;
-    const is = initialIS();
+    const is = freshIS();
     const few = movieScore(is, movie(1, { rating: 9, votes: 3 })).rating;
     const many = movieScore(is, movie(2, { rating: 8, votes: 10000 })).rating;
     expect(few).toBeCloseTo((3 * 9 + priorVotes * mean) / (3 + priorVotes) / 10);
@@ -20,7 +20,7 @@ describe("movieScore factors", () => {
 
   test("runtime fit: neutral if unknown, full for well under a limit, zero past it", () => {
     const fit = (runtime: number | undefined, range: { min?: number; max?: number }) => {
-      const is = initialIS();
+      const is = freshIS();
       is.constraints.runtime = range;
       return movieScore(is, movie(1, { runtime })).runtime;
     };
@@ -38,7 +38,7 @@ describe("rejection signal", () => {
   const sibling = movie(1, { genres: ["Comedy", "Crime"], overview: "a heist gone wrong" });
   const other = movie(2, { genres: ["Drama"], overview: "a quiet family story" });
   const stateWith = (...rejected: object[]) => {
-    const is = initialIS();
+    const is = freshIS();
     is.rejected = rejected as typeof is.rejected;
     return is;
   };
@@ -46,7 +46,7 @@ describe("rejection signal", () => {
 
 
   test("the sibling of a rejected movie ranks below an otherwise equal movie", () => {
-    expect(rank(initialIS(), [sibling, other]).map((m) => m.id)).toEqual([1, 2]); // tie: original order
+    expect(rank(freshIS(), [sibling, other]).map((m) => m.id)).toEqual([1, 2]); // tie: original order
     expect(rank(stateWith(rejectedHeist), [sibling, other]).map((m) => m.id)).toEqual([2, 1]);
   });
 
@@ -81,7 +81,7 @@ describe("rankWithSemantics", () => {
   test("semantic similarity breaks ties between equally scored movies", () => {
     const movies = [movie(1), movie(2)];
     const order = (scores: [number, number][]) =>
-      rankWithSemantics(initialIS(), movies, new Map(scores)).map((m) => m.id);
+      rankWithSemantics(freshIS(), movies, new Map(scores)).map((m) => m.id);
     expect(order([[1, 0.2], [2, 0.9]])).toEqual([2, 1]);
     expect(order([[1, 0.9], [2, 0.2]])).toEqual([1, 2]);
     expect(order([[1, 0.5], [2, 0.5]])).toEqual([1, 2]); // all equal: original order kept

@@ -1,5 +1,6 @@
 import type { Movie, SearchCriteria, TmdbClient } from "../core/types";
 import { isDebug } from "../core/util";
+import { settings } from "../config/settings";
 
 export interface TmdbOptions {
   baseUrl: string;
@@ -61,6 +62,15 @@ export function buildDiscoverParams(
   if (c.year.max !== undefined) p["primary_release_date.lte"] = `${c.year.max}-12-31`;
   if (c.rating !== undefined) p["vote_average.gte"] = String(c.rating);
   if (c.language) p.with_original_language = c.language;
+  if (c.certificationLte) {
+    p.certification_country = "US";
+    p["certification.lte"] = c.certificationLte;
+  }
+  if (c.watch) {
+    p.watch_region = c.watch.region;
+    p.with_watch_providers = c.watch.providers.join("|");
+    p.with_watch_monetization_types = settings.intake.monetization;
+  }
   return p;
 }
 
@@ -143,6 +153,7 @@ export function createTmdb(o: TmdbOptions): TmdbClient {
     async discover(criteria) {
       const g = await loadGenres();
       const params = buildDiscoverParams(criteria, g.byName, o);
+      if (isDebug()) console.log(`[tmdb] discover ${new URLSearchParams(params)}`);
       // Page 1 doubles as a probe: it tells us how many pages this query really has.
       const probe = await get("/discover/movie", { ...params, page: "1" });
       const available = Math.min(probe.total_pages ?? 1, o.pageWindow);

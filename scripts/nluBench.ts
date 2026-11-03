@@ -6,6 +6,8 @@
  * (any reasonable reading passes) so a model fails for being wrong, not for being worded differently.
  */
 import { initialIS } from "../src/core/state";
+import { parseIntake } from "../src/core/intake";
+import sampleProfile from "../profiles/solo.json";
 import type { InformationState, LlmClient, Move, Movie, Turn } from "../src/core/types";
 import { understand } from "../src/dialogue/nlu";
 
@@ -279,7 +281,7 @@ export const cases: BenchCase[] = [
 ];
 
 export function stateFor(c: BenchCase): InformationState {
-  const base = initialIS();
+  const base = initialIS(parseIntake(sampleProfile));
   const is: InformationState = {
     ...base,
     history: c.history ?? [],

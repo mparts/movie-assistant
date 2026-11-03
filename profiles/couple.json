@@ -1,0 +1,4 @@
+{
+  "profile": { "name": "Maria", "age": 34, "country": "NL", "platforms": [] },
+  "tonight": { "maxMinutes": 120, "avoidGenres": ["War"], "company": "relationship" }
+}

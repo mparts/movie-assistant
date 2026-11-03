@@ -23,6 +23,17 @@ describe("tmdb params", () => {
     expect(buildDiscoverParams({ ...c, matchAll: true }, ids, o).with_genres).toBe("10749,35");
     expect(buildDiscoverParams({ ...c, matchAll: false }, ids, o).with_genres).toBe("10749|35");
   });
+
+  test("Phase 1 adds certification and subscription platforms only when set", () => {
+    const o = { language: "en-US", sortBy: "popularity.desc", minVotes: 100 };
+    const c = { genres: [], matchAll: false, excludeGenres: [], runtime: {}, year: {}, page: 1 };
+    const p = buildDiscoverParams({ ...c, certificationLte: "PG", watch: { region: "NL", providers: [8, 337] } }, new Map(), o);
+    expect(p).toMatchObject({
+      certification_country: "US", "certification.lte": "PG",
+      watch_region: "NL", with_watch_providers: "8|337", with_watch_monetization_types: "flatrate",
+    });
+    expect(Object.keys(buildDiscoverParams(c, new Map(), o)).filter((k) => /cert|watch/.test(k))).toEqual([]);
+  });
 });
 
 describe("llm fallback", () => {

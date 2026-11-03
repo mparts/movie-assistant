@@ -64,6 +64,17 @@ export const settings = {
     maxEntries: 20000,
   },
 
+  /** Phase 1 (the form) → TMDB filters. */
+  intake: {
+    /** US ratings for everyone (best TMDB coverage). First row whose `maxAge` covers the youngest viewer wins; older = no limit. */
+    certification: [
+      { maxAge: 12, cert: "PG" },
+      { maxAge: 15, cert: "PG-13" },
+    ],
+    /** Platforms count only when included in a subscription. */
+    monetization: "flatrate",
+  },
+
   search: {
     language: "en-US",
     sortBy: "popularity.desc",

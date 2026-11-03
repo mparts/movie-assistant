@@ -5,6 +5,8 @@ import { createBrowserInspector } from "@statelyai/inspect";
 import { azure } from "../config/services";
 import { settings } from "../config/settings";
 import { initialIS } from "../core/state";
+import { parseIntake } from "../core/intake";
+import sampleProfile from "../../profiles/family.json";
 import type { DMContext, DMEvent, NextMovesEvent } from "../core/types";
 import { createClients } from "../services";
 import { dme } from "../dialogue/dme";
@@ -31,7 +33,8 @@ const dmMachine = setup({
   },
   types: {} as { context: DMContext; events: DMEvent },
 }).createMachine({
-  context: ({ spawn }) => ({ ssRef: spawn(speechstate, { input: speechSettings }), ...clients, is: initialIS() }),
+  // Until the settings form exists (todo step 3), the browser uses a sample profile.
+  context: ({ spawn }) => ({ ssRef: spawn(speechstate, { input: speechSettings }), ...clients, is: initialIS(parseIntake(sampleProfile)) }),
   id: "DM",
   initial: "Prepare",
   states: {

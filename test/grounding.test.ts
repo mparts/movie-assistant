@@ -1,6 +1,6 @@
 import { describe, expect, test, vi } from "vitest";
 import { rules } from "../src/core/rules";
-import { initialIS } from "../src/core/state";
+import { freshIS } from "./fixtures";
 import type { InformationState as IS, LlmClient, Move, Movie } from "../src/core/types";
 import { ground, isAffirmation } from "../src/dialogue/grounding";
 import { understand } from "../src/dialogue/nlu";
@@ -10,7 +10,7 @@ const movie = (id: number, title: string): Movie => ({ id, title, genres: ["Come
 const llmSays = (out: unknown) => ({ json: vi.fn(async () => out) }) as unknown as LlmClient & { json: ReturnType<typeof vi.fn> };
 /** A state right after the assistant suggested `title`, saying `jake`. */
 const after = (title: string | null, jake: string): IS => {
-  const is = initialIS();
+  const is = freshIS();
   is.history = [{ speaker: "sys", text: jake }];
   if (title) {
     is.recommended = [movie(1, title)];
@@ -123,7 +123,7 @@ describe("C: a negated genre needs a 'no' right before it", () => {
 
 describe("a zero or negative limit is dropped", () => {
   test("runtime eq 0 (a model's way of saying 'no limit') records nothing", async () => {
-    const out = await understand(llmSays({ moves: [{ type: "constrain", slot: "runtime", op: "eq", value: 0 }, { type: "constrain", slot: "runtime", op: "lte", value: 90 }] }), "x", initialIS());
+    const out = await understand(llmSays({ moves: [{ type: "constrain", slot: "runtime", op: "eq", value: 0 }, { type: "constrain", slot: "runtime", op: "lte", value: 90 }] }), "x", freshIS());
     expect(out).toEqual([{ type: "constrain", slot: "runtime", op: "lte", value: 90 }]);
   });
 });
@@ -134,7 +134,7 @@ describe("D: retract slots named as the NLU sees them", () => {
     ["wantedGenres", "genres"],
     ["maxRuntimeMinutes", "runtime"],
   ])("%s → %s", async (given, real) => {
-    const out = await understand(llmSays({ moves: [{ type: "retract", slot: given }] }), "drop that", initialIS());
+    const out = await understand(llmSays({ moves: [{ type: "retract", slot: given }] }), "drop that", freshIS());
     expect(out).toEqual([{ type: "retract", slot: real }]);
   });
 });

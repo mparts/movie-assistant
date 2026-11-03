@@ -14,7 +14,7 @@ type Mode = "explore" | "clarify" | "recommend" | "wrapup";
 /** One LLM call: conversation + state + real TMDB candidates → what to say (and which candidate, if any). */
 export async function respond(llm: LlmClient, is: InformationState): Promise<Reply> {
   // Scripted turns: no LLM needed.
-  if (is.history.length === 0) return { say: utterances.opening };
+  if (is.history.length === 0) return { say: utterances.opening(is.intake) };
   const lastUser = [...is.history].reverse().find((t) => t.speaker === "usr");
   if (lastUser?.text === d.silenceMarker) return { say: utterances.noInput };
 

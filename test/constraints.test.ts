@@ -1,13 +1,13 @@
 import { describe, expect, test } from "vitest";
 import { settings } from "../src/config/settings";
 import { constrain, retract } from "../src/core/constraints";
-import { initialIS } from "../src/core/state";
+import { freshIS } from "./fixtures";
 
 const tol = settings.adjust.runtimeExactTolerance;
 
 describe("constrain", () => {
   test("a runtime limit sets max, a minimum sets min, an exact length makes a band around it", () => {
-    let is = constrain(initialIS(), { type: "constrain", slot: "runtime", op: "lte", value: 100 });
+    let is = constrain(freshIS(), { type: "constrain", slot: "runtime", op: "lte", value: 100 });
     expect(is.constraints.runtime).toEqual({ max: 100 });
     is = constrain(is, { type: "constrain", slot: "runtime", op: "gte", value: 80 });
     expect(is.constraints.runtime).toEqual({ min: 80, max: 100 });
@@ -20,7 +20,7 @@ describe("constrain", () => {
 
 describe("year bounds", () => {
   test("a new bound beyond the opposite one replaces it: 'recent, not the 90s' is not the empty range 2000-1999", () => {
-    const is = initialIS();
+    const is = freshIS();
     is.constraints.year = { min: 1990, max: 1999 };
     expect(constrain(is, { type: "constrain", slot: "year", op: "gte", value: 2020 }).constraints.year).toEqual({ min: 2020 });
     expect(constrain(is, { type: "constrain", slot: "year", op: "lte", value: 1985 }).constraints.year).toEqual({ max: 1985 });
@@ -31,7 +31,7 @@ describe("year bounds", () => {
 describe("adjust and retract", () => {
 
   test("retracting the runtime clears it, \"all\" clears everything, an unknown slot changes nothing", () => {
-    const is = initialIS();
+    const is = freshIS();
     is.constraints.runtime = { max: 90 };
     is.constraints.rating = 7;
     is.prefs.genres = ["Comedy"];
