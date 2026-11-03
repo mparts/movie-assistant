@@ -23,6 +23,7 @@ const perfect: Record<string, unknown[]> = {
   "do you have anything a bit shorter than that?": [{ type: "adjust", dimension: "runtime", direction: "shorter" }],
   "never mind the time limit, any length is fine": [{ type: "retract", slot: "runtime" }],
   "only movies from the nineties please": [{ type: "constrain", slot: "year", op: "gte", value: 1990 }],
+  "something from the last few years": [{ type: "constrain", slot: "year", op: "gte", value: new Date().getFullYear() - 5 }],
   "yeap you got me... lighthearted date vibe it is!!": [{ type: "vibe", text: "lighthearted date" }],
   "hhmm... no I do not like this.. maybe something more funny": [{ type: "reject" }, { type: "adjust", dimension: "tone", direction: "funnier" }],
   "yes please do that!!": [{ type: "retract", slot: "avoidGenres" }], // the name the NLU is shown; normalised to "dislikes"

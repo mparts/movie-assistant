@@ -63,6 +63,18 @@ describe("A: a bare yes after a suggestion is an accept, without the LLM", () =>
 
 });
 
+describe("wrap-up with a duplicate title", () => {
+  test("a recommend id is ignored, and the accepted title may be named even if another candidate shares it", async () => {
+    const is = after("Solaris", "How about Solaris?");
+    is.accepted = 1;
+    is.candidates = [movie(2, "Solaris"), movie(3, "Other Film")];
+    is.history.push({ speaker: "usr", text: "yes, this one!!" });
+    const llm = llmSays({ say: "Solaris it is, enjoy it.", recommend: 1 });
+    expect(await respond(llm, is)).toEqual({ say: "Solaris it is, enjoy it." });
+    expect(llm.json).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("B: moves the user's words do not support are dropped", () => {
   const jake = "Back to the Future has that fun, goofy vibe with a sweet hint of romance, perfect for a light date night.";
   test("vibes copied from the assistant's last turn are dropped; the user's own are kept", () => {

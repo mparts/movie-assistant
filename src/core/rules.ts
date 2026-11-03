@@ -128,8 +128,12 @@ export const rules: Record<string, Rule> = {
       ...is,
       shared: { ...is.shared, lu: { moves, speaker } },
       history: text ? [...is.history, { speaker, text }] : is.history,
+      // Any feedback from the user ("seen it", "not that one", a new wish) ends a run of suggestions; silence or a
+      // vague reply keeps it, which is what leads to a clarifying question.
       recommendStreak:
-        speaker === "usr" ? is.recommendStreak : recommendedIds(moves).length ? is.recommendStreak + 1 : 0,
+        speaker === "usr"
+          ? moves.some((m) => m.type !== "noinput") ? 0 : is.recommendStreak
+          : recommendedIds(moves).length ? is.recommendStreak + 1 : 0,
       accepted,
       readiness: evidence.length
         ? {

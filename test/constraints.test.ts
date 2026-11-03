@@ -18,6 +18,16 @@ describe("constrain", () => {
 
 });
 
+describe("year bounds", () => {
+  test("a new bound beyond the opposite one replaces it: 'recent, not the 90s' is not the empty range 2000-1999", () => {
+    const is = initialIS();
+    is.constraints.year = { min: 1990, max: 1999 };
+    expect(constrain(is, { type: "constrain", slot: "year", op: "gte", value: 2020 }).constraints.year).toEqual({ min: 2020 });
+    expect(constrain(is, { type: "constrain", slot: "year", op: "lte", value: 1985 }).constraints.year).toEqual({ max: 1985 });
+    expect(constrain(is, { type: "constrain", slot: "year", op: "gte", value: 1995 }).constraints.year).toEqual({ min: 1995, max: 1999 });
+  });
+});
+
 describe("adjust and retract", () => {
 
   test("retracting the runtime clears it, \"all\" clears everything, an unknown slot changes nothing", () => {

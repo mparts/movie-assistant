@@ -2,6 +2,11 @@
  * Every prompt and every pre-written line the assistant speaks. Edit wording here; no text lives in code.
  */
 import { GENRES } from "../core/lexicon";
+import { settings } from "./settings";
+
+const thisYear = new Date().getFullYear();
+/** The earliest year that still counts as "recent". */
+const recentFrom = thisYear - settings.adjust.recentYears;
 
 /** Fixed lines (no LLM involved). */
 export const utterances = {
@@ -45,13 +50,14 @@ Move types:
 {"type":"restart"}  they want to start over
 
 Genres are exactly: ${GENRES.join(", ")}.
+Today's year is ${thisYear}. "Recent" or "the last few years" means ${recentFrom} or later.
 Use the conversation and the known state to resolve "that", "it", "the first one". Several moves per utterance are fine. Speech recognition may mishear titles: if a title looks like a misheard movie, write the most likely real title.
 The assistant's last turn is context, not the person's words: never record something only the assistant said, including the options it offered. If the person picks one ("the second one", "yeah, that one"), record that option; if they answer without choosing ("no idea", "you decide"), record nothing. A "yes" to a question that proposed something other than a movie means that thing: record the move that carries it out. A "no" belongs only to the words right after it: "no, not that one, something funnier" rejects the movie and asks for funnier; it does not avoid comedy.
 
 Examples:
 "I only have about ninety minutes" -> {"moves":[{"type":"constrain","slot":"runtime","op":"lte","value":90}]}
 "something cozy to watch with my girlfriend" -> {"moves":[{"type":"vibe","text":"cozy"},{"type":"vibe","text":"date night"}]}
-"no horror please, and something recent" -> {"moves":[{"type":"prefer","genre":"Horror","negated":true},{"type":"constrain","slot":"year","op":"gte","value":2015}]}
+"no horror please, and something recent" -> {"moves":[{"type":"prefer","genre":"Horror","negated":true},{"type":"constrain","slot":"year","op":"gte","value":${recentFrom}}]}
 "I loved Knives Out" -> {"moves":[{"type":"like","title":"Knives Out"}]}
 "something quick" -> {"moves":[{"type":"constrain","slot":"runtime","op":"lte","value":100}]}
 "I've already seen that one" -> {"moves":[{"type":"seen"}]}

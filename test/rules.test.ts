@@ -58,6 +58,18 @@ describe("rules: preferences and search", () => {
   });
 });
 
+describe("rules: suggestion streak", () => {
+  test("any feedback from the user ends a run of suggestions; silence or a vague reply does not", () => {
+    const is = initialIS();
+    is.recommendStreak = 2;
+    const after = (moves: Move[]) => rules.get_latest_move({ is, latest_moves: moves, latest_speaker: "usr", latest_text: "x" })!().recommendStreak;
+    expect(after([{ type: "seen", title: "Sing 2" }])).toBe(0);
+    expect(after([{ type: "reject" }])).toBe(0);
+    expect(after([])).toBe(2);
+    expect(after([{ type: "noinput" }])).toBe(2);
+  });
+});
+
 describe("rules: restart", () => {
   test("a restart forgets preferences but keeps the conversation history, and says so", () => {
     const is = heard([{ type: "restart" }], (s) => {

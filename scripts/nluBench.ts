@@ -258,6 +258,18 @@ export const cases: BenchCase[] = [
       ),
   },
   {
+    name: "recent-years",
+    utterance: "something from the last few years",
+    // The model has to know today's date: "last few years" is about 5 years back, not 2010.
+    check: (m) => {
+      const year = new Date().getFullYear();
+      return expect(
+        of(m, "constrain").some((c) => c.slot === "year" && c.op === "gte" && typeof c.value === "number" && c.value >= year - 7 && c.value <= year),
+        "no year bound within about 7 years of today"
+      );
+    },
+  },
+  {
     name: "question-gives-nothing",
     history: [sys("How about Knives Out? It's a clever whodunit.")],
     suggested: "Knives Out",

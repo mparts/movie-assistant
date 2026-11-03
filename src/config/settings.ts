@@ -116,6 +116,8 @@ export const settings = {
     runtimeFloor: 60,
     runtimeExactTolerance: 15,
     yearStep: 10,
+    /** "Recent" or "the last few years" means this many years back from today. */
+    recentYears: 5,
     yearOlderStep: 15,
     yearDefaultMin: 2000,
     ratingStep: 0.5,

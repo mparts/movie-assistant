@@ -16,11 +16,14 @@ export function constrain(is: IS, m: MoveOf<"constrain">): IS {
       if (m.op === "lte") return withC({ runtime: { ...c.runtime, max: n } });
       if (m.op === "gte") return withC({ runtime: { ...c.runtime, min: n } });
       return withC({ runtime: { min: n - A.runtimeExactTolerance, max: n + A.runtimeExactTolerance } });
-    case "year":
+    case "year": {
       if (isNaN(n)) return is;
-      if (m.op === "lte") return withC({ year: { ...c.year, max: n } });
-      if (m.op === "gte") return withC({ year: { ...c.year, min: n } });
+      const { min, max } = c.year;
+      // A new bound beyond the opposite one replaces it: "recent, not the 90s" must not leave the empty range 2000 to 1999.
+      if (m.op === "lte") return withC({ year: { min: min !== undefined && min > n ? undefined : min, max: n } });
+      if (m.op === "gte") return withC({ year: { min: n, max: max !== undefined && max < n ? undefined : max } });
       return withC({ year: { min: n, max: n } });
+    }
     case "rating":
       return isNaN(n) || m.op === "lte" ? is : withC({ rating: n });
     case "language": {

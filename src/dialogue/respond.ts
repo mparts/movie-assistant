@@ -70,7 +70,10 @@ export async function respond(llm: LlmClient, is: InformationState): Promise<Rep
   ];
 
   // In explore/clarify mode the LLM must not name movies; clarifying may refer back to what was already suggested.
-  const forbiddenTitles = (mode === "clarify" || mode === "wrapup" ? is.candidates : [...is.candidates, ...is.recommended])
+  // (Wrap-up may name the accepted movie, even if another candidate has the same title, e.g. two films called "Solaris".)
+  const forbiddenTitles = (mode === "wrapup"
+    ? is.candidates.filter((m) => m.title !== accepted?.title)
+    : mode === "clarify" ? is.candidates : [...is.candidates, ...is.recommended])
     .map((m) => m.title)
     .filter((t) => t.length >= 4);
 
@@ -87,7 +90,7 @@ export async function respond(llm: LlmClient, is: InformationState): Promise<Rep
       }
       return { say, movieId: id };
     }
-    if (id !== undefined || forbiddenTitles.some((t) => mentions(say, t))) {
+    if ((mode !== "wrapup" && id !== undefined) || forbiddenTitles.some((t) => mentions(say, t))) {
       console.warn("[respond] Premature recommendation blocked; retrying");
       continue;
     }
