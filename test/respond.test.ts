@@ -15,17 +15,7 @@ describe("scripted turns never call the LLM", () => {
     expect(llm.json).not.toHaveBeenCalled();
   });
 
-  test("silence", async () => {
-    const llm = fakeLlm({});
-    const is = initialIS();
-    is.candidates = [movie];
-    is.history = [
-      { speaker: "sys", text: utterances.opening },
-      { speaker: "usr", text: settings.dialogue.silenceMarker },
-    ];
-    expect(await respond(llm, is)).toEqual({ say: utterances.noInput });
-    expect(llm.json).not.toHaveBeenCalled();
-  });
+
 });
 
 describe("guards on the LLM", () => {

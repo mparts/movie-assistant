@@ -117,12 +117,20 @@ export const rules: Record<string, Rule> = {
     const speaker = latest_speaker!;
     const text = speaker === "sys" ? spokenText(moves) : latest_text || settings.dialogue.silenceMarker;
     const evidence = speaker === "usr" ? evidenceFromMoves(moves) : [];
+    // "Yes, this one" is remembered until the user says anything substantive again, so a following "thanks" stays in wrap-up.
+    const accepted =
+      speaker !== "usr" || moves.length === 0 || moves.every((m) => m.type === "noinput")
+        ? is.accepted
+        : moves.some((m) => m.type === "accept")
+          ? last(is.recommended)?.id
+          : undefined;
     return {
       ...is,
       shared: { ...is.shared, lu: { moves, speaker } },
       history: text ? [...is.history, { speaker, text }] : is.history,
       recommendStreak:
         speaker === "usr" ? is.recommendStreak : recommendedIds(moves).length ? is.recommendStreak + 1 : 0,
+      accepted,
       readiness: evidence.length
         ? {
             meaningfulTurns: is.readiness.meaningfulTurns + 1,

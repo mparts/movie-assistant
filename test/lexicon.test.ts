@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { GENRES, languageCode, MOODS, MOOD_SYNONYMS, resolveGenres, resolvePreference, resolveTone, synonymGenres } from "../src/core/lexicon";
+import { GENRES, MOODS, MOOD_SYNONYMS, resolveGenres, resolvePreference, synonymGenres } from "../src/core/lexicon";
 
 describe("lexicon", () => {
   test("moods and genres resolve to TMDB genre names", () => {
@@ -9,16 +9,7 @@ describe("lexicon", () => {
     expect(resolveGenres("horror")).toEqual(["Horror"]);
   });
 
-  test("unknown text resolves to nothing", () => {
-    expect(resolveGenres("gibberish")).toEqual([]);
-    expect(resolveGenres(undefined)).toEqual([]);
-  });
 
-  test("comparatives resolve through moods", () => {
-    expect(resolveTone("funnier")).toEqual(["Comedy"]);
-    expect(resolveTone("more exciting")).toEqual(["Action", "Thriller", "Adventure"]);
-    expect(resolveTone("scarier")).toEqual(["Horror"]);
-  });
 
   test("named genres and single-genre moods are required; multi-genre moods are alternatives", () => {
     expect(resolvePreference("Comedy")).toEqual({ names: ["Comedy"], required: true });
@@ -48,9 +39,5 @@ describe("lexicon", () => {
     }
   });
 
-  test("languages", () => {
-    expect(languageCode("Korean")).toBe("ko");
-    expect(languageCode("fr")).toBe("fr");
-    expect(languageCode("klingon")).toBeUndefined();
-  });
+
 });

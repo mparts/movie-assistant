@@ -1,6 +1,5 @@
 import { describe, expect, test, vi } from "vitest";
-import { cosine01 } from "../src/services/embeddings";
-import { createLlm } from "../src/services/llm";
+import { createLlm, orderByPreference } from "../src/services/llm";
 import { buildDiscoverParams } from "../src/services/tmdb";
 
 describe("tmdb params", () => {
@@ -26,14 +25,6 @@ describe("tmdb params", () => {
   });
 });
 
-describe("embeddings", () => {
-  test("cosine maps to 0..1", () => {
-    expect(cosine01([1, 0], [1, 0])).toBe(1);
-    expect(cosine01([1, 0], [-1, 0])).toBe(0);
-    expect(cosine01([1, 0], [0, 1])).toBeCloseTo(0.5);
-  });
-});
-
 describe("llm fallback", () => {
   test("falls back to the next backend; `prefer` goes first", async () => {
     const calls: string[] = [];
@@ -53,4 +44,15 @@ describe("llm fallback", () => {
     expect(calls).toEqual(["http://b/chat/completions"]);
     vi.unstubAllGlobals();
   });
+
+  test("`prefer` can be an ordered list, and unlisted backends keep their configured order after it", () => {
+    const b = ["groq", "ollama", "local"].map((name) => ({ name }));
+    const order = (p?: string | string[]) => orderByPreference(b, p).map((x) => x.name);
+    expect(order()).toEqual(["groq", "ollama", "local"]);
+    expect(order("local")).toEqual(["local", "groq", "ollama"]);
+    expect(order(["ollama", "local"])).toEqual(["ollama", "local", "groq"]);
+    expect(order(["nobody"])).toEqual(["groq", "ollama", "local"]);
+  });
+
+
 });

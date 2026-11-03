@@ -14,6 +14,8 @@ export interface BenchCase {
   history?: Turn[];
   /** Movie the assistant last suggested (the focus for "that one"). */
   suggested?: string;
+  /** Did the assistant's last turn recommend it? Default: yes when `suggested` is set. */
+  justSuggested?: boolean;
   /** Edits to the information state before the utterance (what the system already knows). */
   state?: (is: InformationState) => InformationState;
   utterance: string;
@@ -28,12 +30,108 @@ const stub = (title: string): Movie => ({ id: 1, title, genres: [], rating: 7, v
 const of = <T extends Move["type"]>(moves: Move[], type: T) =>
   moves.filter((m): m is Extract<Move, { type: T }> => m.type === type);
 const expect = (ok: boolean, why: string) => (ok ? null : why);
+/** The first part of the chat in chat.log that broke the app ("real-*" cases below). */
+const realHistory: Turn[] = [
+  sys("Hey! I'm Jake, your movie companion. How are you feeling today?"),
+  usr("hey I am alright, how are you?"),
+  sys("I'm good, thanks. Anything particular you're in the mood for tonight?"),
+  usr("I was thinking something romantic but also funny!!"),
+];
+const offer = sys("Romance and laughs, nice combo. Are you leaning more toward a lighthearted date vibe or something with a bit more heart?");
+const realSuggestion = [...realHistory, offer, usr("yeap you got me... lighthearted date vibe it is!!"), sys("Roman Holiday has that sweet, breezy romance and funny moments perfect for a light date night.")];
+const onlyAccept = (m: Move[]) => expect(m.length === 1 && m[0].type === "accept", `expected one accept move, got ${JSON.stringify(m)}`);
 const romcom = (is: InformationState): InformationState => ({
   ...is,
   prefs: { ...is.prefs, genres: ["Romance", "Comedy"], required: ["Romance", "Comedy"] },
 });
 
 export const cases: BenchCase[] = [
+  {
+    name: "real-pick-offered-vibe",
+    history: [...realHistory, offer],
+    state: romcom,
+    utterance: "yeap you got me... lighthearted date vibe it is!!",
+    check: (m) => expect(of(m, "vibe").some((v) => /light|date/i.test(v.text)), "the chosen vibe was not recorded"),
+  },
+  {
+    name: "real-reject-and-funnier",
+    history: realSuggestion,
+    suggested: "Roman Holiday",
+    state: romcom,
+    utterance: "hhmm... no I do not like this.. maybe something more funny",
+    // The "no" belongs to "this", not to funny: Comedy must never end up avoided.
+    check: (m) =>
+      expect(
+        !of(m, "prefer").some((p) => p.negated) &&
+          (of(m, "reject").length > 0 || of(m, "adjust").some((a) => /funn/i.test(a.direction))),
+        "the 'no' was attached to a genre, or neither the rejection nor 'funnier' was understood"
+      ),
+  },
+  {
+    name: "real-accept-bare-yes",
+    history: [...realSuggestion, usr("hhmm... no, maybe something more funny"), sys("How about About Time? It mixes sweet romance with a lot of humor, perfect for a light date night.")],
+    suggested: "About Time",
+    state: romcom,
+    utterance: "yeah why not.. let's go with that!!",
+    check: onlyAccept,
+  },
+  {
+    name: "real-yes-drops-the-restriction",
+    history: [...realSuggestion, sys("Got it, you want more laughs. Would you be willing to drop the no-comedy restriction?")],
+    suggested: "About Time",
+    justSuggested: false,
+    state: (is) => ({ ...is, prefs: { ...is.prefs, genres: ["Romance"] }, dislikes: { genres: ["Comedy"] } }),
+    utterance: "yes please do that!!",
+    // Either way the avoided genre is released: a retract, or a plain "wants Comedy" (which removes it from the avoided).
+    check: (m) =>
+      expect(
+        of(m, "retract").some((r) => r.slot === "dislikes") || of(m, "prefer").some((p) => !p.negated && /comedy/i.test(p.genre ?? "")),
+        "the avoided genre was not released"
+      ),
+  },
+  {
+    name: "real-yes-to-an-alternative",
+    history: [...realSuggestion, sys("Looks like none of the picks are big comedies, but we could go with a sweet romance like Past Lives if that works for you.")],
+    justSuggested: false,
+    state: (is) => ({ ...is, prefs: { ...is.prefs, genres: ["Romance", "Drama"] } }),
+    utterance: "yes it works!!",
+    // Nothing to record, or an accept; repeating the genres already known is harmless. Never a negated genre, a vibe
+    // or a like taken from Jake's sentence.
+    check: (m) =>
+      expect(
+        m.every((x) => x.type === "accept" || (x.type === "prefer" && !x.negated && /^(romance|comedy|drama)$/i.test(x.genre ?? ""))),
+        `recorded ${JSON.stringify(m)} from the assistant's words`
+      ),
+  },
+  {
+    name: "real-confirm-this-one",
+    history: [...realSuggestion, sys("Back to the Future has that fun, goofy vibe with a sweet hint of romance, perfect for a light date night.")],
+    suggested: "Back to the Future",
+    state: romcom,
+    utterance: "yes this one",
+    check: onlyAccept,
+  },
+  {
+    name: "accept-with-extra-words",
+    history: [sys("How about Palm Springs? It's a funny, warm time-loop romance.")],
+    suggested: "Palm Springs",
+    state: romcom,
+    utterance: "ok that sounds great, let's watch it tonight",
+    check: (m) => expect(of(m, "accept").length === 1 && m.every((x) => x.type === "accept"), `expected only an accept, got ${JSON.stringify(m)}`),
+  },
+  {
+    name: "unsure-copies-nothing-from-jake",
+    history: [sys("Back to the Future has that fun, goofy vibe with a sweet hint of romance, perfect for a light date night.")],
+    suggested: "Back to the Future",
+    state: romcom,
+    utterance: "hmm, I'm not sure about that one",
+    check: (m) => expect(!of(m, "vibe").length && !of(m, "like").length && !of(m, "prefer").some((p) => p.negated), `recorded ${JSON.stringify(m)}`),
+  },
+  {
+    name: "no-genre-kept",
+    utterance: "no scary stuff please",
+    check: (m) => expect(of(m, "prefer").some((p) => p.negated && /horror|scary/i.test(`${p.genre ?? ""} ${p.mood ?? ""}`)), "no negated Horror"),
+  },
   {
     name: "6c-pick-offered-option",
     history: [
@@ -59,7 +157,13 @@ export const cases: BenchCase[] = [
     ],
     state: romcom,
     utterance: "hmm, not sure yet, what do you think?",
-    check: (m) => expect(!of(m, "vibe").length && !of(m, "prefer").length, "stored Jake's own options as the user's taste"),
+    // Repeating the genres already known (Romance, Comedy) is harmless: the rules dedupe it. Anything else is
+    // Jake's offered options or the user's hesitation ("not sure yet") recorded as taste.
+    check: (m) =>
+      expect(
+        !of(m, "vibe").length && of(m, "prefer").every((p) => /^(romance|comedy)$/i.test(p.genre ?? "") && !p.negated),
+        "recorded something that was not the user's answer (Jake's options, or hesitation)"
+      ),
   },
   {
     name: "6b-negated-setting",
@@ -168,6 +272,7 @@ export function stateFor(c: BenchCase): InformationState {
     ...base,
     history: c.history ?? [],
     recommended: c.suggested ? [stub(c.suggested)] : [],
+    recommendStreak: c.suggested && c.justSuggested !== false ? 1 : 0,
   };
   return c.state ? c.state(is) : is;
 }

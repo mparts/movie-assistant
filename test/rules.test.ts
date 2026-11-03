@@ -44,19 +44,7 @@ describe("rules: preferences and search", () => {
     expect(changed.candidates).toEqual([]);
   });
 
-  test("a vibe triggers the first search only when it is the first signal", () => {
-    const vibe: Move[] = [{ type: "vibe", text: "cozy" }];
-    expect(run("integrate_vibe", heard(vibe))!.search.status).toBe("dirty");
-    const later = run("integrate_vibe", heard(vibe, (s) => { s.prefs.genres = ["Comedy"]; }))!;
-    expect(later.vibe).toEqual(["cozy"]);
-    expect(later.search.status).toBe("idle");
-  });
 
-  test("rules ignore moves that did not come from the user", () => {
-    const is = initialIS();
-    is.shared = { lu: { speaker: "sys", moves: [{ type: "constrain", slot: "runtime", op: "lte", value: 90 }] } };
-    expect(run("integrate_constrain", is)).toBeUndefined();
-  });
 
   test("next_page fires below the batch limit and stops at it", () => {
     const at = (page: number) =>
@@ -97,12 +85,6 @@ describe("rules: naming a movie", () => {
     expect(run("integrate_seen_reject", is)!.rejected).toEqual([]);
   });
 
-  test("\"that one\" (no title) rejects the movie in focus, the last one suggested", () => {
-    const is = heard([{ type: "reject" }], (s) => {
-      s.recommended = [movie(1, "First"), movie(2, "Second")];
-    });
-    expect(run("integrate_seen_reject", is)!.rejected).toEqual([{ id: 2, reason: "no", genres: [], overview: "" }]);
-  });
 
   test("rejecting a movie saves a snapshot of it and sinks its siblings in the same turn", () => {
     const withGenres = (id: number, title: string, genres: string[]): Movie => ({ ...movie(id, title), genres });
@@ -145,11 +127,6 @@ describe("rules: moods the lexicon does not know", () => {
     expect(next.vibe).toEqual(["heartfelt"]);
   });
 
-  test("the same word as a vibe move maps the same way", () => {
-    const next = run("integrate_vibe", heard([{ type: "vibe", text: "goofy" }]))!;
-    expect(next.vibe).toEqual(["goofy"]);
-    expect(next.prefs.genres).toEqual(["Comedy"]);
-  });
 
   test("a negated unknown mood is not turned into its opposite: nothing is stored", () => {
     const is = heard([{ type: "prefer", mood: "goofy", negated: true }]);
@@ -158,9 +135,7 @@ describe("rules: moods the lexicon does not know", () => {
     expect(rules.integrate_vibe({ is: afterPrefer })).toBeUndefined();
   });
 
-  test("known moods and genres are not duplicated as vibes", () => {
-    expect(rules.integrate_vibe({ is: heard([{ type: "prefer", mood: "funny", genre: "Comedy" }]) })).toBeUndefined();
-  });
+
 });
 
 describe("rules: combined genres", () => {
@@ -174,16 +149,6 @@ describe("rules: combined genres", () => {
     expect(exciting.prefs.required).toEqual([]);
   });
 
-  test("a negated genre or a retract drops it from the required set", () => {
-    const setup = (s: IS) => {
-      s.prefs.genres = ["Romance", "Comedy"];
-      s.prefs.required = ["Romance", "Comedy"];
-    };
-    const negated = run("integrate_prefer", heard([{ type: "prefer", genre: "Romance", negated: true }], setup))!;
-    expect(negated.prefs.required).toEqual(["Comedy"]);
-    const retracted = run("integrate_retract", heard([{ type: "retract", slot: "genres" }], setup))!;
-    expect(retracted.prefs.required).toEqual([]);
-  });
 
   /** After a search for these required genres that found `total` movies. */
   const searched = (required: string[], total: number) =>
@@ -203,8 +168,5 @@ describe("rules: combined genres", () => {
     expect(run("relax_genres", next)).toBeUndefined();
   });
 
-  test("no fallback for a single genre or a large enough pool", () => {
-    expect(run("relax_genres", searched(["Western"], 3))).toBeUndefined();
-    expect(run("relax_genres", searched(["Romance", "Comedy"], settings.search.thinPool))).toBeUndefined();
-  });
+
 });

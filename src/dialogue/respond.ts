@@ -9,7 +9,7 @@ const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 /** Whole-word, case-insensitive: "Up" must not match "supper". */
 const mentions = (text: string, title: string) => new RegExp(`(^|\\W)${escape(title)}(\\W|$)`, "i").test(text);
 
-type Mode = "explore" | "clarify" | "recommend";
+type Mode = "explore" | "clarify" | "recommend" | "wrapup";
 
 /** One LLM call: conversation + state + real TMDB candidates → what to say (and which candidate, if any). */
 export async function respond(llm: LlmClient, is: InformationState): Promise<Reply> {
@@ -19,7 +19,14 @@ export async function respond(llm: LlmClient, is: InformationState): Promise<Rep
   if (lastUser?.text === d.silenceMarker) return { say: utterances.noInput };
 
   const readiness = recommendationReadiness(is);
-  const mode: Mode = !readiness.ready ? "explore" : is.recommendStreak >= d.maxRecommendStreak ? "clarify" : "recommend";
+  const accepted = is.accepted === undefined ? undefined : is.recommended.find((m) => m.id === is.accepted);
+  const mode: Mode = accepted
+    ? "wrapup"
+    : !readiness.ready
+      ? "explore"
+      : is.recommendStreak >= d.maxRecommendStreak
+        ? "clarify"
+        : "recommend";
   // Candidates are withheld unless we're in recommend mode: the LLM cannot pick one early.
   const pool = mode === "recommend" ? is.candidates.slice(0, d.candidatesShown) : [];
   const status =
@@ -43,6 +50,7 @@ export async function respond(llm: LlmClient, is: InformationState): Promise<Rep
           runtimeMinutes: m.runtime,
           description: m.overview.slice(0, d.descriptionChars.suggested),
         })),
+        acceptedMovie: accepted?.title,
         candidatePool: mode === "recommend" ? status : "exploring",
         recommendationReady: mode === "recommend",
         meaningfulUserTurns: readiness.userTurns,
@@ -62,7 +70,7 @@ export async function respond(llm: LlmClient, is: InformationState): Promise<Rep
   ];
 
   // In explore/clarify mode the LLM must not name movies; clarifying may refer back to what was already suggested.
-  const forbiddenTitles = (mode === "clarify" ? is.candidates : [...is.candidates, ...is.recommended])
+  const forbiddenTitles = (mode === "clarify" || mode === "wrapup" ? is.candidates : [...is.candidates, ...is.recommended])
     .map((m) => m.title)
     .filter((t) => t.length >= 4);
 
@@ -86,6 +94,7 @@ export async function respond(llm: LlmClient, is: InformationState): Promise<Rep
     return { say };
   }
 
+  if (mode === "wrapup") return { say: utterances.wrapupFallback };
   if (mode === "clarify") return { say: utterances.clarifyFallback };
   if (mode === "explore") return { say: utterances.exploreFallback };
   throw new Error("LLM kept recommending a movie outside the candidates");

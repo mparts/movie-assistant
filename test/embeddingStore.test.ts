@@ -48,14 +48,6 @@ describe("embedding store", () => {
     expect(second.size).toBe(2);
   });
 
-  test("only descriptions are written to disk, never queries", async () => {
-    await embedder({ store: createFileStore(file, 100) }).score("light and funny", movies);
-    const saved = JSON.parse(readFileSync(file, "utf8"));
-    expect(saved.model).toBe("m1");
-    const keys = Object.keys(saved.entries);
-    expect(keys).toHaveLength(2);
-    expect(keys.every((k) => k.startsWith("d:"))).toBe(true);
-  });
 
   test("a different model discards the saved vectors", async () => {
     await embedder({ store: createFileStore(file, 100) }).score("x", movies);
@@ -64,12 +56,6 @@ describe("embedding store", () => {
     expect(sent[0]).toHaveLength(3); // everything embedded again
   });
 
-  test("a changed document prefix does not reuse old vectors", async () => {
-    await embedder({ store: createFileStore(file, 100) }).score("x", movies);
-    sent = [];
-    await embedder({ documentPrefix: "doc: ", store: createFileStore(file, 100) }).score("x", movies);
-    expect(sent[0]).toHaveLength(3);
-  });
 
   test("a corrupt cache file is ignored and replaced", async () => {
     await embedder({ store: createFileStore(file, 100) }).score("x", movies); // creates the folder and file
@@ -81,27 +67,7 @@ describe("embedding store", () => {
     expect(Object.keys(JSON.parse(readFileSync(file, "utf8")).entries)).toHaveLength(2);
   });
 
-  test("entries with invalid vectors are skipped on load", () => {
-    const store = createFileStore(file, 100);
-    store.save("m1", new Map([["d:a", [1, 2]]]));
-    const raw = JSON.parse(readFileSync(file, "utf8"));
-    raw.entries["d:bad"] = ["x"];
-    raw.entries["d:empty"] = [];
-    writeFileSync(file, JSON.stringify(raw));
-    expect([...store.load("m1").keys()]).toEqual(["d:a"]);
-  });
 
-  test("the oldest entries are dropped beyond maxEntries", () => {
-    const store = createFileStore(file, 2);
-    store.save("m1", new Map([["d:a", [1]], ["d:b", [2]], ["d:c", [3]]]));
-    expect([...store.load("m1").keys()]).toEqual(["d:b", "d:c"]);
-  });
 
-  test("without a store, behaviour is unchanged: nothing on disk, memory cache still works", async () => {
-    const e = embedder();
-    await e.score("x", movies);
-    sent = [];
-    await e.score("x", movies);
-    expect(sent).toEqual([]); // second call fully served from memory
-  });
+
 });

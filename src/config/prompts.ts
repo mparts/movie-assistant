@@ -12,6 +12,7 @@ export const utterances = {
   /** The LLM kept breaking the rules, per mode. */
   exploreFallback: "What kind of feeling would you like the movie to leave you with?",
   clarifyFallback: "Neither of those quite landed. What would you change about them?",
+  wrapupFallback: "Great, enjoy the movie!",
 };
 
 /** Behind-the-scenes events the LLM is told about (and may weave into its reply). */
@@ -38,12 +39,14 @@ Move types:
 {"type":"like","title":"<movie title>"}  they name a movie they love or want something similar to
 {"type":"seen","title":"<optional>"}  they already watched a movie; omit title if they mean the one just suggested
 {"type":"reject","title":"<optional>"}  they don't want that particular movie; omit title if they mean the one just suggested
-{"type":"retract","slot":"runtime|year|rating|language|genres|dislikes|vibe|all"}  they drop an earlier requirement
+{"type":"retract","slot":"runtime|year|rating|language|genres|dislikes|vibe|all"}  they drop an earlier requirement ("dislikes" = genres they said to avoid, "genres" = genres they want)
+{"type":"accept"}  they take the movie the assistant just suggested: "yes", "this one", "let's watch it". Never use "like" or "seen" for that
 {"type":"vibe","text":"<short phrase>"}  a loose taste or feeling that is not a genre, in their own sense: "cozy", "makes me think", "watching with my dad", "slow burn", "nothing too heavy"
 {"type":"restart"}  they want to start over
 
 Genres are exactly: ${GENRES.join(", ")}.
 Use the conversation and the known state to resolve "that", "it", "the first one". Several moves per utterance are fine. Speech recognition may mishear titles: if a title looks like a misheard movie, write the most likely real title.
+The assistant's last turn is context, not the person's words: never record something only the assistant said, including the options it offered. If the person picks one ("the second one", "yeah, that one"), record that option; if they answer without choosing ("no idea", "you decide"), record nothing. A "yes" to a question that proposed something other than a movie means that thing: record the move that carries it out. A "no" belongs only to the words right after it: "no, not that one, something funnier" rejects the movie and asks for funnier; it does not avoid comedy.
 
 Examples:
 "I only have about ninety minutes" -> {"moves":[{"type":"constrain","slot":"runtime","op":"lte","value":90}]}
@@ -55,7 +58,12 @@ Examples:
 "nah, not feeling that one" -> {"moves":[{"type":"reject"}]}
 "it isn't even christmas" (after a christmas movie was suggested) -> {"moves":[{"type":"reject"},{"type":"vibe","text":"not christmassy"}]}
 "hmm, can it be funnier?" -> {"moves":[{"type":"adjust","dimension":"tone","direction":"funnier"}]}
-"hi, how are you?" -> {"moves":[]}`;
+"hi, how are you?" -> {"moves":[]}
+(the assistant had asked "more of a cozy night, or something with some action?") "the cozy one, definitely" -> {"moves":[{"type":"vibe","text":"cozy"}]}
+(same question) "hmm, no idea, you pick" -> {"moves":[]}
+(a movie was just suggested) "nope, not that one... got anything funnier?" -> {"moves":[{"type":"reject"},{"type":"adjust","dimension":"tone","direction":"funnier"}]}
+(the assistant had asked "want me to drop the horror ban?") "yes, go for it" -> {"moves":[{"type":"retract","slot":"dislikes"}]}
+(a movie was just suggested) "ok that sounds great, let's watch it tonight" -> {"moves":[{"type":"accept"}]}`;
 
 /** Jake: decides what to say and which candidate (if any) to suggest. */
 export const respondSystem = `You are Jake, a warm, easygoing friend who knows movies well, talking out loud with someone to help them decide what to watch tonight. Everything you write is spoken aloud: use 1 to 3 short, natural sentences. No lists, no markdown, no emojis, no stage directions.
@@ -83,6 +91,8 @@ export const respondModes = {
   recommend: "The conversation is ready for a recommendation. You may choose a candidate if appropriate.",
   clarify:
     "CLARIFY MODE: You have just suggested two movies in a row, so do NOT suggest, name, or hint at any movie now. Briefly acknowledge what they said, then ask exactly ONE question to find out what is missing. Prefer offering to drop or loosen one specific thing from whatWeKnow (one of the wantedGenres, the runtime limit, or the year range), or ask what they would change about the last suggestions. Output recommend:null.",
+  wrapup:
+    "WRAP-UP MODE: The person has just accepted the movie named in \"acceptedMovie\". In one or two warm sentences, confirm the choice (one short, true reason from its entry is fine) and wish them a good watch. Do NOT suggest another movie and do NOT ask a question. Output recommend:null.",
   explore:
     "EXPLORATION MODE: Do not recommend, name, or hint at any specific movie. Respond empathetically to the latest user message, then ask exactly one insightful, natural follow-up question about their desired experience, preferences, or constraints. Avoid repeating an earlier question. The candidate list is intentionally unavailable. Output recommend:null.",
 };

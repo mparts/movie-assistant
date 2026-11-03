@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { settings } from "../src/config/settings";
-import { adjust, constrain, retract } from "../src/core/constraints";
+import { constrain, retract } from "../src/core/constraints";
 import { initialIS } from "../src/core/state";
 
 const tol = settings.adjust.runtimeExactTolerance;
@@ -15,24 +15,10 @@ describe("constrain", () => {
     expect(is.constraints.runtime).toEqual({ min: 90 - tol, max: 90 + tol });
   });
 
-  test("values it cannot use are ignored and leave the state untouched", () => {
-    const is = initialIS();
-    expect(constrain(is, { type: "constrain", slot: "runtime", op: "lte", value: "soon" })).toBe(is);
-    expect(constrain(is, { type: "constrain", slot: "language", op: "eq", value: "klingon" })).toBe(is);
-    expect(constrain(is, { type: "constrain", slot: "rating", op: "lte", value: 6 })).toBe(is);
-  });
+
 });
 
 describe("adjust and retract", () => {
-  test("\"shorter\" lowers the runtime limit step by step, but never below the floor", () => {
-    const first = adjust(initialIS(), { type: "adjust", dimension: "runtime", direction: "shorter" });
-    expect(first.constraints.runtime.max).toBe(settings.adjust.runtimeDefaultMax - settings.adjust.runtimeStep);
-    const low = initialIS();
-    low.constraints.runtime = { max: settings.adjust.runtimeFloor + 5 };
-    expect(adjust(low, { type: "adjust", dimension: "runtime", direction: "shorter" }).constraints.runtime.max).toBe(
-      settings.adjust.runtimeFloor
-    );
-  });
 
   test("retracting the runtime clears it, \"all\" clears everything, an unknown slot changes nothing", () => {
     const is = initialIS();

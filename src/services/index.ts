@@ -3,7 +3,7 @@ import { authHeaders, embeddings as embCfg, Env, llmBackends, LlmBackendConfig, 
 import { settings } from "../config/settings";
 import type { LlmClient, TmdbClient } from "../core/types";
 import { createEmbedder, type Embedder, type EmbeddingStore } from "./embeddings";
-import { createLlm, LlmBackend } from "./llm";
+import { createLlm, LlmBackend, type LlmAnswer } from "./llm";
 import { createTmdb, type RuntimeStore } from "./tmdb";
 
 export interface Clients {
@@ -30,11 +30,12 @@ export function resolveBackend(b: LlmBackendConfig, where: "upstream" | "proxy",
  *
  * `extras.embeddingStore` / `extras.runtimeStore` make description vectors / movie runtimes survive restarts
  * (Node scripts pass file stores; the browser passes nothing and keeps them in memory).
+ * `extras.onLlmAnswer` is told which LLM backend answered each call.
  */
 export function createClients(
   where: "upstream" | "proxy",
   env: Env = {},
-  extras: { embeddingStore?: EmbeddingStore; runtimeStore?: RuntimeStore } = {}
+  extras: { embeddingStore?: EmbeddingStore; runtimeStore?: RuntimeStore; onLlmAnswer?: (a: LlmAnswer) => void } = {}
 ): Clients {
   const url = (s: keyof typeof services) => services[s][where];
   const headers = (s: keyof typeof services) => (where === "upstream" ? authHeaders(services[s], env) : undefined);
@@ -59,5 +60,5 @@ export function createClients(
       })
     : undefined;
 
-  return { tmdb, llm: createLlm(backends), embedder };
+  return { tmdb, llm: createLlm(backends, extras.onLlmAnswer), embedder };
 }

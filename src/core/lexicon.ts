@@ -89,6 +89,21 @@ export function resolveGenres(text?: string): string[] {
 }
 
 /**
+ * Every everyday word that points at one of these genres: the genre itself, its aliases ("comedies"), the moods that
+ * include it ("funny", "hilarious") and the mood synonyms ("goofy"). All lowercase, may hold several words ("sci fi").
+ */
+export function wordsFor(genres: string[]): string[] {
+  const wanted = new Set(genres);
+  const hit = (list: string | string[]) => [list].flat().some((g) => wanted.has(g));
+  const words = new Set<string>();
+  for (const g of genres) words.add(g.toLowerCase());
+  for (const [w, v] of Object.entries(GENRE_ALIASES)) if (hit(v)) words.add(norm(w));
+  for (const [w, v] of Object.entries(MOODS)) if (hit(v)) words.add(norm(w));
+  for (const [w, mood] of Object.entries(MOOD_SYNONYMS)) if (hit(MOODS[mood])) words.add(norm(w));
+  return [...words];
+}
+
+/**
  * Genres for a word that is only a synonym of a mood ("goofy" → Comedy); [] for anything else, including real moods
  * and genres (those go through `resolvePreference`). These are alternatives to rank by, never required.
  */

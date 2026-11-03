@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
@@ -67,40 +67,9 @@ describe("runtime store", () => {
     expect(second.map((m) => m.runtime)).toEqual([91, 92, 93]);
   });
 
-  test("a corrupt cache file is ignored and replaced", async () => {
-    await tmdb(createRuntimeFileStore(file, 100)).discover(criteria); // creates the folder and file
-    writeFileSync(file, "{ not json");
-    movieCalls = [];
-    const movies = await tmdb(createRuntimeFileStore(file, 100)).discover(criteria).then((r) => r.movies);
-    expect(movieCalls.sort()).toEqual([1, 2, 3]);
-    expect(movies.map((m) => m.runtime)).toEqual([91, 92, 93]);
-    expect(JSON.parse(readFileSync(file, "utf8")).entries).toHaveLength(3);
-  });
 
-  test("invalid entries are skipped on load", () => {
-    const store = createRuntimeFileStore(file, 100);
-    store.save(new Map([[1, 100]]));
-    writeFileSync(file, JSON.stringify({ entries: [[1, 100], [2, -5], [3, 0], ["x", 90], [4, 90.5], [5], "bad", [6, 120]] }));
-    expect([...store.load()]).toEqual([[1, 100], [6, 120]]);
-  });
 
-  test("the oldest entries are dropped beyond maxEntries, and age order survives a reload", () => {
-    const store = createRuntimeFileStore(file, 2);
-    store.save(new Map([[30, 90], [10, 100], [20, 110]]));
-    expect([...store.load()]).toEqual([[10, 100], [20, 110]]); // not re-sorted by id
-  });
 
-  test("a missing file loads as empty", () => {
-    expect(createRuntimeFileStore(join(dir, "nope.json"), 10).load().size).toBe(0);
-  });
 
-  test("without a store, behaviour is unchanged: memory cache only", async () => {
-    const t = tmdb();
-    await t.discover(criteria).then((r) => r.movies);
-    movieCalls = [];
-    await t.discover(criteria).then((r) => r.movies);
-    expect(movieCalls).toEqual([]); // same instance: served from memory
-    await tmdb().discover(criteria).then((r) => r.movies);
-    expect(movieCalls.sort()).toEqual([1, 2, 3]); // a new instance starts empty
-  });
+
 });

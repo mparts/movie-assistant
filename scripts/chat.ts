@@ -12,16 +12,23 @@ import type { DMEContext, Movie, NextMovesEvent } from "../src/core/types";
 import { dme } from "../src/dialogue/dme";
 import { nlg } from "../src/dialogue/nlg";
 import { createClients } from "../src/services";
+import { orderByPreference } from "../src/services/llm";
 import { createFileStore } from "../src/services/embeddingStore";
 import { createRuntimeFileStore } from "../src/services/runtimeStore";
 import { loadEnv } from "./env";
 
 const env = loadEnv();
 const clients = createClients("upstream", env, {
+  // After every LLM call: what it was for, who answered, how long, and who failed first.
+  onLlmAnswer: (a) =>
+    console.log(`  [${a.purpose ?? "LLM"}] ${a.backend} (${a.model}) ${Math.round(a.ms)}ms${a.failed.length ? `, after ${a.failed.join(", ")} failed` : ""}`),
   embeddingStore: createFileStore(settings.embeddingCache.path, settings.embeddingCache.maxEntries),
   runtimeStore: createRuntimeFileStore(settings.runtimeCache.path, settings.runtimeCache.maxEntries),
 });
-console.log(`LLM backends (in order): ${llmBackends.filter((b) => b.enabled !== false).map((b) => `${b.name}:${b.model}`).join(" → ")}`);
+const enabledBackends = llmBackends.filter((b) => b.enabled !== false);
+const order = (prefer?: string | string[]) => orderByPreference(enabledBackends, prefer).map((b) => `${b.name}:${b.model}`).join(" → ");
+console.log(`NLU backends (in order): ${order(settings.llm.understand.prefer)}`);
+console.log(`NLG backends (in order): ${order(settings.llm.respond.prefer)}`);
 if (!env.DEBUG) console.info = () => {}; // hide per-rule logs unless DEBUG=1
 
 const rl = createInterface({ input: process.stdin, output: process.stdout });

@@ -40,6 +40,7 @@ export type Move =
   | { type: "retract"; slot: string }
   | { type: "vibe"; text: string } // loose taste that isn't a genre: "cozy", "makes me think"
   | { type: "restart" }
+  | { type: "accept" } // "yes, this one": they take the movie the assistant just suggested
   | { type: "noinput" }
   | { type: "say"; text: string; movieId?: number }; // system utterance (+ the movie it recommends)
 
@@ -87,6 +88,8 @@ export interface InformationState {
   rejected: { id: number; reason: "seen" | "no"; genres?: string[]; overview?: string }[];
   /** consecutive system turns that recommended a movie; reset by any turn that didn't */
   recommendStreak: number;
+  /** Id of the suggested movie the user accepted. Cleared when they say anything substantive afterwards. */
+  accepted?: number;
 
   /** `page` counts batches of TMDB pages, not single pages. `total`: TMDB's result count for the last search. */
   search: { status: "idle" | "dirty" | "failed"; page: number; noMore: boolean; total?: number };
@@ -115,8 +118,10 @@ export type ChatMessage = { role: "system" | "user" | "assistant"; content: stri
 export interface LlmOptions {
   temperature?: number;
   maxTokens?: number;
-  /** Name of the backend to try first for this call; the others stay as fallbacks. */
-  prefer?: string;
+  /** Backend name(s) to try first, in this order; the others follow in their configured order as fallbacks. */
+  prefer?: string | string[];
+  /** What the call is for ("NLU", "NLG"): shown when reporting which backend answered. */
+  purpose?: string;
 }
 
 export interface LlmClient {

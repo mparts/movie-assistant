@@ -22,6 +22,18 @@ export const settings = {
     descriptionChars: { candidate: 220, suggested: 400, seed: 400 },
     /** Recommendations start after this many informative user turns AND distinct signals... */
     readiness: { minTurns: 2, minSignals: 2 },
+    /**
+     * A reply that is ONLY agreement ("yes", "sounds good", "let's go with that"), judged on the lowercased text with
+     * punctuation and apostrophes removed ("let's" → "lets"). Right after a suggested movie it means "I'll take it"
+     * and is understood without the LLM. Anything else in the reply (e.g. "yes please do that") goes to the LLM.
+     */
+    affirmation: new RegExp(
+      "^(?:(?:yes|yeah|yeap|yep|yup|sure|ok|okay|alright|all right|perfect|great|nice|cool|awesome|definitely|absolutely|for sure|why not|please|thanks|thank you|good|fine" +
+        "|sounds (?:good|great|perfect|nice)|that (?:works|sounds (?:good|great|perfect)|one)|thats (?:good|great|perfect)|it works|this works|works for me|this one" +
+        "|go for it|lets (?:go with|do|take|watch)(?: it| that| this)?(?: one)?|ill (?:take|watch)(?: it| that| this)?)(?:\\s+|$))+$"
+    ),
+    /** More words than this is not a bare agreement, whatever it matches. */
+    affirmationMaxWords: 12,
     /** ...unless the user asks us to stop asking questions. */
     skipQuestions:
       /\b(just (pick|choose|recommend)|surprise me|you (pick|choose)|stop asking|give me (a|one) (movie|recommendation)|recommend (something|one|a movie) (now|already))\b/i,
@@ -30,9 +42,13 @@ export const settings = {
   llm: {
     /** Used when a call passes no options. */
     defaults: { temperature: 0, maxTokens: 800 },
-    /** Understanding is structured extraction: deterministic, and fine on a small local model. */
-    understand: { temperature: 0, maxTokens: 800, prefer: "ollama" as string | undefined },
-    respond: { temperature: 0.7, maxTokens: 1200, prefer: undefined as string | undefined },
+    /**
+     * Understanding is structured extraction: deterministic, and fine on a 7-8B model. Tried in this order (the local
+     * model needs no tunnel), so Groq (last) is only reached when both are unavailable.
+     */
+    understand: { temperature: 0, maxTokens: 800, purpose: "NLU", prefer: ["local", "ollama"] as string[] | undefined },
+    /** Jake's replies: no preference, so the configured order applies (Groq first, then the others as fallbacks). */
+    respond: { temperature: 0.7, maxTokens: 1200, purpose: "NLG", prefer: undefined as string[] | undefined },
   },
 
   /** On-disk cache of movie-description vectors (Node scripts only; the browser keeps them in memory). */

@@ -46,8 +46,12 @@ export const llmBackends: LlmBackendConfig[] = [
     extraBody: { reasoning_effort: "low" }, // gpt-oss "thinks" first; keep it short, this is a spoken conversation
   },
   { name: "ollama", service: "universityOllama", model: "llama3.1:latest", timeoutMs: 60_000 },
-
-  { name: "local", service: "localLlm", model: "qwen2.5:3b-instruct", timeoutMs: 60_000, enabled: false },
+  /**
+   * Model on this machine, the last resort for every call. Of the models tried, qwen2.5:7b-instruct was the most
+   * accurate for NLU (14/15 on `npm run nlu-bench`); it runs about a quarter on CPU on the 6 GB GPU (~0.7 s per NLU call).
+   * Replies from it are weaker than Groq's. Set `enabled: false` to drop it (the bench can still use it by name).
+   */
+  { name: "local", service: "localLlm", model: "qwen2.5:7b-instruct", timeoutMs: 60_000 },
 ];
 
 /** Semantic ranking of candidates. Set `enabled: false` to rank without embeddings. */

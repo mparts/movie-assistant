@@ -11,19 +11,38 @@ export interface LlmBackend {
   extraBody?: Record<string, unknown>;
 }
 
+/** The preferred names first, in the order given; everything else after them in its original order. */
+export function orderByPreference<T extends { name: string }>(list: T[], prefer?: string | string[]): T[] {
+  const names = prefer === undefined ? [] : [prefer].flat();
+  const rank = (b: T) => (names.includes(b.name) ? names.indexOf(b.name) : names.length);
+  return [...list].sort((a, b) => rank(a) - rank(b)); // the sort is stable
+}
+
+/** Reported after every successful call: who answered, how long it took, and which backends failed first. */
+export interface LlmAnswer {
+  purpose?: string;
+  backend: string;
+  model: string;
+  ms: number;
+  failed: string[];
+}
+
 /** Tries the backends in order (`opts.prefer` goes first); the first that answers wins. */
-export function createLlm(backends: LlmBackend[]): LlmClient {
+export function createLlm(backends: LlmBackend[], onAnswer?: (a: LlmAnswer) => void): LlmClient {
   return {
     async json(messages, opts) {
-      const ordered = opts?.prefer
-        ? [...backends].sort((a, b) => Number(b.name === opts.prefer) - Number(a.name === opts.prefer))
-        : backends;
+      const ordered = orderByPreference(backends, opts?.prefer);
+      const failed: string[] = [];
+      const t0 = performance.now();
       let lastError: unknown;
       for (const b of ordered) {
         try {
-          return await call(b, messages, opts);
+          const out = await call(b, messages, opts);
+          onAnswer?.({ purpose: opts?.purpose, backend: b.name, model: b.model, ms: performance.now() - t0, failed });
+          return out;
         } catch (e) {
           console.warn(`[LLM ${b.name} failed]`, e);
+          failed.push(b.name);
           lastError = e;
         }
       }

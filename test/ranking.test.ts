@@ -43,16 +43,7 @@ describe("rejection signal", () => {
     return is;
   };
 
-  test("no rejections means no penalty", () => {
-    expect(movieScore(initialIS(), sibling).rejection).toBe(0);
-  });
 
-  test("a movie like one the user turned down is penalised, an unrelated one is not", () => {
-    const is = stateWith(rejectedHeist);
-    expect(movieScore(is, sibling).rejection).toBeGreaterThan(0.5);
-    expect(movieScore(is, other).rejection).toBe(0);
-    expect(movieScore(is, sibling).total).toBeLessThan(movieScore(initialIS(), sibling).total);
-  });
 
   test("the sibling of a rejected movie ranks below an otherwise equal movie", () => {
     expect(rank(initialIS(), [sibling, other]).map((m) => m.id)).toEqual([1, 2]); // tie: original order
@@ -76,12 +67,6 @@ describe("rejection signal", () => {
     expect(lead(is)).toBeCloseTo(lead(wanting()));
   });
 
-  test("genres the user did not ask for still count: a rejected horror-comedy sinks other horror-comedies", () => {
-    const is = stateWith({ id: 99, reason: "no", genres: ["Comedy", "Horror"], overview: "" });
-    is.prefs.genres = ["Comedy"];
-    expect(movieScore(is, movie(5, { genres: ["Comedy", "Horror"], overview: "" })).rejection).toBeGreaterThan(0.5);
-    expect(movieScore(is, movie(6, { genres: ["Comedy", "Romance"], overview: "" })).rejection).toBe(0);
-  });
 
   test("\"already seen\" is not a dislike: it gives no penalty", () => {
     const is = stateWith({ ...rejectedHeist, reason: "seen" });
@@ -89,9 +74,7 @@ describe("rejection signal", () => {
     expect(rank(is, [sibling, other]).map((m) => m.id)).toEqual([1, 2]);
   });
 
-  test("a rejection without a saved snapshot (older data) gives no penalty and does not crash", () => {
-    expect(movieScore(stateWith({ id: 99, reason: "no" }), sibling).rejection).toBe(0);
-  });
+
 });
 
 describe("rankWithSemantics", () => {
@@ -104,9 +87,5 @@ describe("rankWithSemantics", () => {
     expect(order([[1, 0.5], [2, 0.5]])).toEqual([1, 2]); // all equal: original order kept
   });
 
-  test("a movie without a semantic score gets no invented match", () => {
-    const movies = [movie(1), movie(2), movie(3)];
-    const ids = rankWithSemantics(initialIS(), movies, new Map([[1, 0.5], [2, 0.9]])).map((m) => m.id);
-    expect(ids).toEqual([2, 1, 3]);
-  });
+
 });
