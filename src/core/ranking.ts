@@ -2,7 +2,7 @@
 import { settings } from "../config/settings";
 import { InformationState as IS, Movie } from "./types";
 
-const { weights, ratingPrior, similarityMix, semanticWeight } = settings.ranking;
+const { weights, ratingPrior, similarityMix, semanticWeight, neutral, runtimeFit: fit } = settings.ranking;
 
 /** Ignore common description words so similarity reflects the plot, not filler. */
 const STOP_WORDS = new Set(
@@ -21,17 +21,17 @@ function overlap<T>(a: Set<T>, b: Set<T>): number {
 
 /** Soft runtime fit; hard runtime limits are already applied by TMDB discovery. */
 function runtimeFit(is: IS, movie: Movie): number {
-  if (!movie.runtime || movie.runtime <= 0) return 0.5; // unknown: neutral
+  if (!movie.runtime || movie.runtime <= 0) return neutral; // unknown: neutral
   const { min, max } = is.constraints.runtime;
   if (min !== undefined && movie.runtime < min) return 0;
   if (max !== undefined && movie.runtime > max) return 0;
   if (min !== undefined && max !== undefined) {
     const mid = (min + max) / 2;
-    return Math.max(0, 1 - Math.abs(movie.runtime - mid) / Math.max(30, (max - min) / 2));
+    return Math.max(0, 1 - Math.abs(movie.runtime - mid) / Math.max(fit.minHalfBand, (max - min) / 2));
   }
-  if (max !== undefined) return Math.min(1, Math.max(0, (max - movie.runtime) / 60 + 0.5));
-  if (min !== undefined) return Math.min(1, Math.max(0, (movie.runtime - min) / 60 + 0.5));
-  return 0.5; // no runtime preference: neutral
+  if (max !== undefined) return Math.min(1, Math.max(0, (max - movie.runtime) / fit.rampMinutes + neutral));
+  if (min !== undefined) return Math.min(1, Math.max(0, (movie.runtime - min) / fit.rampMinutes + neutral));
+  return neutral; // no runtime preference: neutral
 }
 
 /** A transparent 0..1 score per factor, and the weighted total. */
@@ -78,7 +78,7 @@ export function rankWithSemantics(is: IS, movies: Movie[], semantic: Map<number,
   if (!vals.length) return rank(is, movies);
   // Raw cosine scores cluster in a narrow band; stretch them over 0..1 so they can actually reorder candidates.
   const lo = Math.min(...vals), hi = Math.max(...vals);
-  const norm = (v: number) => (hi > lo ? (v - lo) / (hi - lo) : 0.5);
+  const norm = (v: number) => (hi > lo ? (v - lo) / (hi - lo) : neutral);
   return byScore(pool.map((movie, index) => ({
     movie, index,
     score:

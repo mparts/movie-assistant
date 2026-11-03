@@ -13,7 +13,7 @@ import { criteriaFromIS, hasSignal, tasteProfile } from "../core/state";
 import type {
   DMEContext, DMEEvent, InformationState, LlmClient, Move, Movie, Reply, SaysMovesEvent, SearchCriteria, TmdbClient,
 } from "../core/types";
-import { isDebug, last } from "../core/util";
+import { flushTimings, isDebug, last, timed } from "../core/util";
 import { respond } from "./respond";
 import { understand } from "./nlu";
 
@@ -87,6 +87,9 @@ export const dme = setup({
       ({ context }) => context.parentRef,
       ({ context }) => ({ type: "NEXT_MOVES", value: context.is.next_moves })
     ),
+    flushTimings: () => {
+      flushTimings();
+    },
     isu: assign(({ context }, params: { name: string }) => {
       const is = rules[params.name](context)!(); // never called without its guard
       logIS(params.name, is);
@@ -105,23 +108,23 @@ export const dme = setup({
   actors: {
     /** LLM: what did the user just express? (utterance → moves) */
     understand: fromPromise(async ({ input }: { input: { llm: LlmClient; text: string; is: InformationState } }) =>
-      understand(input.llm, input.text, input.is)
+      timed("NLU", () => understand(input.llm, input.text, input.is))
     ),
     /** LLM: what do we say, and which candidate (if any) do we suggest? */
     respond: fromPromise(async ({ input }: { input: { llm: LlmClient; is: InformationState } }) =>
-      respond(input.llm, input.is)
+      timed("respond", () => respond(input.llm, input.is))
     ),
     semanticRank: fromPromise(
       async ({ input }: { input: { embedder: NonNullable<DMEContext["embedder"]>; profile: string; movies: Movie[] } }) =>
-        input.embedder.score(input.profile, input.movies)
+        timed("embeddings", () => input.embedder.score(input.profile, input.movies))
     ),
     /** TMDB title lookup for "something like X". */
     resolveSeed: fromPromise(async ({ input }: { input: { tmdb: TmdbClient; title: string } }) =>
-      input.tmdb.searchMovie(input.title)
+      timed("TMDB", () => input.tmdb.searchMovie(input.title))
     ),
     /** TMDB discover with the current constraints. */
     search: fromPromise(async ({ input }: { input: { tmdb: TmdbClient; criteria: SearchCriteria } }) =>
-      input.tmdb.discover(input.criteria)
+      timed("TMDB", () => input.tmdb.discover(input.criteria))
     ),
   },
 }).createMachine({
@@ -153,7 +156,7 @@ export const dme = setup({
             },
           },
         },
-        SelectionDone: { always: [{ actions: [{ type: "sendBackNextMoves" }] }], type: "final" },
+        SelectionDone: { always: [{ actions: [{ type: "sendBackNextMoves" }, { type: "flushTimings" }] }], type: "final" },
       },
       onDone: "Update",
     },

@@ -28,6 +28,8 @@ export const settings = {
   },
 
   llm: {
+    /** Used when a call passes no options. */
+    defaults: { temperature: 0, maxTokens: 800 },
     /** Understanding is structured extraction: deterministic, and fine on a small local model. */
     understand: { temperature: 0, maxTokens: 800, prefer: "ollama" as string | undefined },
     respond: { temperature: 0.7, maxTokens: 1200, prefer: undefined as string | undefined },
@@ -45,6 +47,9 @@ export const settings = {
     /** How many batches to try when the pool runs dry. */
     maxBatches: 5,
     runtimeLookupConcurrency: 10,
+    /** TMDB answers 429 when called too fast: wait this long, then retry this many times before giving up. */
+    retryDelayMs: 1000,
+    rateLimitRetries: 1,
   },
 
   ranking: {
@@ -56,6 +61,10 @@ export const settings = {
     ratingPrior: { votes: 250, mean: 6.5 },
     /** Similarity to a liked movie: genre overlap vs. description overlap. */
     similarityMix: { genres: 0.6, text: 0.4 },
+    /** Score for "no information" (unknown runtime, no preference, all-equal semantic scores). */
+    neutral: 0.5,
+    /** Soft runtime fit: smallest half-width (minutes) of the target band, and minutes over which the fit ramps up/down. */
+    runtimeFit: { minHalfBand: 30, rampMinutes: 60 },
   },
 
   /** Step sizes for relative requests ("shorter", "newer", "better") and exact ones ("about 90 minutes"). */

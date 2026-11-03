@@ -11,6 +11,9 @@ export interface TmdbOptions {
   /** Pages of results a session may draw from, in a per-session random order. */
   pageWindow: number;
   runtimeLookupConcurrency: number;
+  /** Wait after a 429, and how many times to retry it before failing. */
+  retryDelayMs: number;
+  rateLimitRetries: number;
 }
 
 type DiscoverOptions = Pick<TmdbOptions, "language" | "sortBy" | "minVotes">;
@@ -62,8 +65,8 @@ export function createTmdb(o: TmdbOptions): TmdbClient {
     const url = `${o.baseUrl}${path}?${new URLSearchParams(params)}`;
     for (let attempt = 0; ; attempt++) {
       const res = await fetch(url, { headers: o.headers });
-      if (res.status === 429 && attempt === 0) {
-        await sleep(1000); // TMDB asks clients to respect 429
+      if (res.status === 429 && attempt < o.rateLimitRetries) {
+        await sleep(o.retryDelayMs); // TMDB asks clients to respect 429
         continue;
       }
       if (!res.ok) throw new Error(`TMDB ${path} HTTP ${res.status}`);

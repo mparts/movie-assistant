@@ -1,3 +1,4 @@
+import { settings } from "../config/settings";
 import type { ChatMessage, LlmClient, LlmOptions } from "../core/types";
 
 /** One OpenAI-compatible chat endpoint (Groq, Ollama, ...), fully resolved: URL and headers included. */
@@ -41,8 +42,8 @@ async function call(b: LlmBackend, messages: ChatMessage[], opts?: LlmOptions): 
       body: JSON.stringify({
         model: b.model,
         messages,
-        temperature: opts?.temperature ?? 0,
-        max_completion_tokens: opts?.maxTokens ?? 800,
+        temperature: opts?.temperature ?? settings.llm.defaults.temperature,
+        max_completion_tokens: opts?.maxTokens ?? settings.llm.defaults.maxTokens,
         response_format: { type: "json_object" },
         ...b.extraBody,
       }),

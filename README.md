@@ -2,14 +2,16 @@
 
 TypeScript · xstate (Information State Update dialogue manager) · speechstate (Azure) · TMDB · Groq / Ollama · Ollama embeddings.
 
+**Language scope: English only.** Speech recognition, prompts, TMDB queries and genre names are all English.
+
 ## Where things live
 
-| You want to change… | File |
-| --- | --- |
-| API keys (secrets only) | `.env.local` (copy `.env.example`) |
-| URLs, models, ports, timeouts, LLM fallback order, embeddings | `src/config/services.ts` |
-| Everything Jake says or is told (prompts, fixed lines, notices) | `src/config/prompts.ts` |
-| Every tunable number (ranking weights, paging, limits, voice, …) | `src/config/settings.ts` |
+| You want to change…                                              | File                               |
+| ---------------------------------------------------------------- | ---------------------------------- |
+| API keys (secrets only)                                          | `.env.local` (copy `.env.example`) |
+| URLs, models, ports, timeouts, LLM fallback order, embeddings    | `src/config/services.ts`           |
+| Everything Jake says or is told (prompts, fixed lines, notices)  | `src/config/prompts.ts`            |
+| Every tunable number (ranking weights, paging, limits, voice, …) | `src/config/settings.ts`           |
 
 ```
 src/
