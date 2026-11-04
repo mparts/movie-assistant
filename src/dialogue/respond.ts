@@ -1,7 +1,7 @@
 import { respondModes, respondSystem, utterances } from "../config/prompts";
 import { settings } from "../config/settings";
 import { hasTaste, stateSummary } from "../core/state";
-import type { InformationState, LlmClient, Movie, NlgMode as Mode, Reply } from "../core/types";
+import type { ChatMessage, InformationState, LlmClient, Movie, NlgMode as Mode, Reply } from "../core/types";
 import { last, namesTitle } from "../core/util";
 
 const { dialogue: d } = settings;
@@ -45,20 +45,21 @@ export async function respond(llm: LlmClient, is: InformationState): Promise<Rep
   // Suggested movies leave "candidates", so the one a question or the wrap-up is about gets its facts here.
   const focus = accepted ?? last(is.recommended);
 
-  const messages = [
-    { role: "system" as const, content: `${respondSystem}\n${respondModes[mode]}` },
-    {
-      role: "user" as const,
-      content: JSON.stringify({
-        conversation: is.history.slice(-d.historyForRespond),
-        whatWeKnow: stateSummary(is),
-        alreadySuggested: is.recommended.map((m) => m.title),
-        suggestedMovie: focus && facts(focus, d.descriptionChars.suggested),
-        acceptedMovie: accepted?.title,
-        ...(mode === "recommend" && { candidates: pool.map((m) => ({ id: m.id, ...facts(m, d.descriptionChars.candidate) })) }),
-        notices: is.private.notices,
-      }),
-    },
+  const state = JSON.stringify({
+    whatWeKnow: stateSummary(is),
+    alreadySuggested: is.recommended.map((m) => m.title),
+    suggestedMovie: focus && facts(focus, d.descriptionChars.suggested),
+    acceptedMovie: accepted?.title,
+    ...(mode === "recommend" && { candidates: pool.map((m) => ({ id: m.id, ...facts(m, d.descriptionChars.candidate) })) }),
+    notices: is.private.notices,
+  });
+  // The state is the last line of the system message, and the conversation follows as chat turns. Elisa's own turns
+  // are written as the JSON she replies with, so the model keeps answering in JSON.
+  const messages: ChatMessage[] = [
+    { role: "system", content: `${respondSystem}\n${respondModes[mode]}\n\nWhat you know now:\n${state}` },
+    ...is.history
+      .slice(-d.historyForRespond)
+      .map((t): ChatMessage => (t.speaker === "usr" ? { role: "user", content: t.text } : { role: "assistant", content: JSON.stringify({ say: t.text }) })),
   ];
 
   // In explore mode the LLM must not name movies. Wrap-up may name the accepted movie, even if another candidate has

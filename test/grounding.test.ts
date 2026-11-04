@@ -55,7 +55,7 @@ describe("A: a bare yes after a suggestion is an accept, without the LLM", () =>
     expect(await respond(llm, is)).toEqual({ say: "Great pick, enjoy About Time tonight.", mode: "wrapup" });
     const [messages] = llm.json.mock.calls[0] as [{ role: string; content: string }[]];
     expect(messages[0].content).toContain("WRAP-UP MODE");
-    const sent = JSON.parse(messages[1].content);
+    const sent = JSON.parse(messages[0].content.split("\n").pop()!);
     expect(sent.acceptedMovie).toBe("About Time");
     expect(sent.candidates).toBeUndefined();
   });
