@@ -1,4 +1,4 @@
-/** The page: the settings form (Phase 1), then the spoken chat with Jake (Phase 2). */
+/** The page: the settings form (Phase 1), then the spoken chat with Elisa (Phase 2). */
 import "./style.css";
 import { formText as T } from "../config/prompts";
 import { certificationFor } from "../core/intake";
@@ -18,7 +18,7 @@ document.querySelector("#app")!.innerHTML = `
     </section>
     <section id="chat" class="panel" hidden>
       <div id="tonight-summary" class="summary"></div>
-      <div class="line jake"><span class="who">${T.chat.jake}</span><p id="jake-said">…</p></div>
+      <div class="line elisa"><span class="who">${T.chat.elisa}</span><p id="elisa-said">…</p></div>
       <div class="line you"><span class="who">${T.chat.you}</span><p id="you-said"></p></div>
       <div id="status-strip"><div id="status-dot"></div><div id="status-text"></div></div>
       <button type="button" id="change">${T.chat.change}</button>
@@ -71,7 +71,7 @@ onChange(() => {
   form.refresh();
   if (!chatting) return;
 
-  const { is, jakeSaid, lastUtterance } = snap.context;
+  const { is, elisaSaid, lastUtterance } = snap.context;
   if (is) {
     const { profile, tonight } = is.intake;
     $("tonight-summary").textContent = [
@@ -81,7 +81,7 @@ onChange(() => {
       tonight.maxMinutes ? T.tonight.minutes(tonight.maxMinutes) : T.tonight.noLimit,
     ].join(" · ");
   }
-  $("jake-said").textContent = jakeSaid ?? "…";
+  $("elisa-said").textContent = elisaSaid ?? "…";
   $("you-said").textContent = lastUtterance ?? "";
   const view = speechView();
   $("status-dot").className = view;

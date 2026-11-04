@@ -18,7 +18,7 @@ export interface BenchCase {
   suggested?: string;
   /** Did the assistant's last turn recommend it? Default: yes when `suggested` is set. */
   justSuggested?: boolean;
-  /** What Jake's last turn left open. Default: a suggestion if he just made one, taste if he spoke last, otherwise none. */
+  /** What Elisa's last turn left open. Default: a suggestion if one was just made, taste if Elisa spoke last, otherwise none. */
   qud?: Qud;
   /** Edits to the information state before the utterance (what the system already knows). */
   state?: (is: InformationState) => InformationState;
@@ -36,7 +36,7 @@ const of = <T extends Move["type"]>(moves: Move[], type: T) =>
 const expect = (ok: boolean, why: string) => (ok ? null : why);
 /** The first part of the chat in chat.log that broke the app ("real-*" cases below). */
 const realHistory: Turn[] = [
-  sys("Hey! I'm Jake, your movie companion. How are you feeling today?"),
+  sys("Hey! I'm Elisa, your movie companion. How are you feeling today?"),
   usr("hey I am alright, how are you?"),
   sys("I'm good, thanks. Anything particular you're in the mood for tonight?"),
   usr("I was thinking something romantic but also funny!!"),
@@ -49,9 +49,9 @@ const wishes = (m: Move[], re: RegExp) => of(m, "wish").some((w) => re.test(w.te
 /** Words that turn a wish into its opposite: they belong in "avoid". */
 const NEGATION = /\b(no|not|without|never|nothing|avoid|but)\b/i;
 const FUNNY = /funn|comed|laugh|humou?r/i;
-/** A family chat where the taste changed after Jake asked or suggested, and the new words got lost. */
+/** A family chat where the taste changed after Elisa asked or suggested, and the new words got lost. */
 const familyAsked: Turn[] = [
-  sys("Hey! I'm Jake, your movie companion. How are you feeling today?"),
+  sys("Hey! I'm Elisa, your movie companion. How are you feeling today?"),
   usr("hey! something for the family tonight, maybe an animated adventure"),
   sys("Sounds lovely. Anything in particular the kids enjoy?"),
 ];
@@ -99,7 +99,7 @@ export const cases: BenchCase[] = [
     justSuggested: false,
     state: romcom,
     utterance: "yes it works!!",
-    // A yes to Jake's proposal may update the wish or accept; never an avoid.
+    // A yes to Elisa's proposal may update the wish or accept; never an avoid.
     check: (m) =>
       expect(
         !of(m, "avoid").length,
@@ -123,7 +123,7 @@ export const cases: BenchCase[] = [
     check: (m) => expect(of(m, "accept").length === 1 && m.every((x) => x.type === "accept"), `expected only an accept, got ${JSON.stringify(m)}`),
   },
   {
-    name: "unsure-copies-nothing-from-jake",
+    name: "unsure-copies-nothing-from-elisa",
     history: [sys("Back to the Future has that fun, goofy vibe with a sweet hint of romance, perfect for a light date night.")],
     suggested: "Back to the Future",
     state: romcom,
@@ -154,7 +154,7 @@ export const cases: BenchCase[] = [
     ],
     state: romcom,
     utterance: "hmm, not sure yet, what do you think?",
-    // Jake's offered options or the user's hesitation must not become taste.
+    // Elisa's offered options or the user's hesitation must not become taste.
     check: (m) =>
       expect(!wishes(m, /heartfelt|not sure/i) && !of(m, "avoid").length, `recorded ${JSON.stringify(m)}`),
   },
@@ -172,8 +172,8 @@ export const cases: BenchCase[] = [
   },
   {
     name: "greeting-gives-nothing",
-    history: [sys("Hey! I'm Jake, your movie companion. How are you feeling today?")],
-    utterance: "I am alright Jake, how are you?",
+    history: [sys("Hey! I'm Elisa, your movie companion. How are you feeling today?")],
+    utterance: "I am alright Elisa, how are you?",
     check: (m) => expect(m.length === 0, `expected no moves, got ${m.length}`),
   },
   {

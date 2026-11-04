@@ -1,4 +1,6 @@
-# Jake — a spoken movie assistant
+# Elisa — a spoken movie assistant
+
+Elisa stands for Entertainment Lookup with Information-State Architecture.
 
 TypeScript · xstate (Information State Update dialogue manager) · speechstate (Azure) · TMDB · Groq / Ollama · Ollama embeddings.
 
@@ -10,7 +12,7 @@ TypeScript · xstate (Information State Update dialogue manager) · speechstate 
 | ---------------------------------------------------------------- | ---------------------------------- |
 | API keys (secrets only)                                          | `.env.local` (copy `.env.example`) |
 | URLs, models, ports, timeouts, LLM fallback order, embeddings    | `src/config/services.ts`           |
-| Everything Jake says or is told (prompts, fixed lines, notices)  | `src/config/prompts.ts`            |
+| Everything Elisa says or is told (prompts, fixed lines, notices)  | `src/config/prompts.ts`            |
 | Every tunable number (ranking weights, paging, limits, voice, …) | `src/config/settings.ts`           |
 
 ```
@@ -40,5 +42,5 @@ University Ollama: `ssh -f -N -L 11435:127.0.0.1:11434 mltgpu-2`. Disable a back
 
 ## Flow
 
-Select (Jake responds) → Update: Grounding → Understand (LLM → moves) → Integrate (rule chain) → Retrieve (seed lookup / TMDB search loop) → SemanticRank (embeddings) → next turn.
+Select (Elisa responds) → Update: Grounding → Understand (LLM → moves) → Integrate (rule chain) → Retrieve (seed lookup / TMDB search loop) → SemanticRank (embeddings) → next turn.
 The LLM only extracts moves and words the reply; rules own the state.

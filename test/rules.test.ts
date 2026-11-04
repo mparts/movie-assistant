@@ -34,7 +34,7 @@ describe("rules: naming a movie", () => {
 });
 
 describe("rules: question under discussion", () => {
-  test("Jake's turn records what it left open, from the mode he replied in", () => {
+  test("Elisa's turn records what it left open, from the mode of the reply", () => {
     const after = (qud: IS["qud"], say: Move) => {
       const is = { ...freshIS(), qud };
       const heardSys = rules.get_latest_move({ is, latest_moves: [say], latest_speaker: "sys" })!();

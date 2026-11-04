@@ -15,7 +15,7 @@ const openingByCompany: Record<Company, string> = {
 export const utterances = {
   /** The first line, from the settings form (no LLM). */
   opening: ({ profile, tonight }: Intake) =>
-    `Hey${profile.name ? ` ${profile.name}` : ""}! I’m Jake. ${openingByCompany[tonight.company]}`,
+    `Hey${profile.name ? ` ${profile.name}` : ""}! I’m Elisa. ${openingByCompany[tonight.company]}`,
   noInput: "Still there? Take your time — what are you thinking?",
   /** The LLM failed or was unreachable. */
   systemError: "Sorry, I lost my train of thought for a second. Could you say that again?",
@@ -75,8 +75,8 @@ The assistant just suggested the movie in "lastSuggestedMovie". If they describe
   none: "",
 };
 
-/** Jake: decides what to say and which candidate (if any) to suggest. */
-export const respondSystem = `You are Jake, a warm, easygoing friend who knows movies well, talking out loud with someone to help them decide what to watch tonight. Everything you write is spoken aloud: use 1 to 3 short, natural sentences. No lists, no markdown, no emojis, no stage directions.
+/** Elisa: decides what to say and which candidate (if any) to suggest. */
+export const respondSystem = `You are Elisa, a warm, easygoing friend who knows movies well, talking out loud with someone to help them decide what to watch tonight. Everything you write is spoken aloud: use 1 to 3 short, natural sentences. No lists, no markdown, no emojis, no stage directions.
 
 Voice: dry, warm, casual, like a friend texting. Vary your openers; never start with "Wow", "Great", "Awesome" or an echo of their words; at most one exclamation mark; no emojis.
 Example: "Ha, fair. Something that won't make you think too hard, then. Are you more in a laughing mood or a cozy one?"
@@ -108,11 +108,11 @@ export const respondModes = {
 
 /** Everything the settings form (Phase 1, browser) says. */
 export const formText = {
-  title: "JAKE",
+  title: "ELISA",
   tagline: "your movie night sidekick",
   name: {
     heading: "First things first",
-    question: "What should Jake call you?",
+    question: "What should Elisa call you?",
     placeholder: "Your name",
     next: "Next",
     guest: "Just browsing (guest)",
@@ -163,11 +163,11 @@ export const formText = {
   },
   back: "Back",
   /** Why "Let's go" is not available yet. */
-  waiting: { notReady: "Warming up the mic…", busy: "Jake is finishing his sentence…", broken: "Speech isn't working (check the Azure key and reload)" },
+  waiting: { notReady: "Warming up the mic…", busy: "Elisa is finishing a sentence…", broken: "Speech isn't working (check the Azure key and reload)" },
   chat: {
     change: "Change tonight's settings",
     you: "You",
-    jake: "Jake",
-    status: { speaking: "Jake is talking", recognising: "Listening…", idle: "Thinking…", "not-ready": "Getting ready…", error: "Speech error" } as Record<string, string>,
+    elisa: "Elisa",
+    status: { speaking: "Elisa is talking", recognising: "Listening…", idle: "Thinking…", "not-ready": "Getting ready…", error: "Speech error" } as Record<string, string>,
   },
 };

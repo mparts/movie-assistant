@@ -35,7 +35,7 @@ const dmMachine = setup({
     loadPool: fromPromise(({ input }: { input: { intake: Intake } }): Promise<Pool> => fetchPool(input.intake)),
   },
   actions: {
-    speak: ({ context }) => context.ssRef.send({ type: "SPEAK", value: { utterance: context.jakeSaid ?? "" } }),
+    speak: ({ context }) => context.ssRef.send({ type: "SPEAK", value: { utterance: context.elisaSaid ?? "" } }),
     listen: ({ context }) => context.ssRef.send({ type: "LISTEN" }),
   },
   types: {} as { context: DMContext; events: DMEvent },
@@ -54,7 +54,7 @@ const dmMachine = setup({
         INTAKE_DONE: {
           target: "FindingMovies",
           actions: assign(({ event }) => ({
-            is: initialIS(event.intake), pool: undefined, poolError: undefined, jakeSaid: undefined, lastUtterance: undefined,
+            is: initialIS(event.intake), pool: undefined, poolError: undefined, elisaSaid: undefined, lastUtterance: undefined,
           })),
         },
       },
@@ -120,7 +120,7 @@ const dmMachine = setup({
                 NEXT_MOVES: {
                   target: "Speaking",
                   actions: [
-                    assign(({ event }) => ({ jakeSaid: nlg((event as NextMovesEvent).value) })),
+                    assign(({ event }) => ({ elisaSaid: nlg((event as NextMovesEvent).value) })),
                     sendTo("dmeID", ({ event }) => ({ type: "SAYS", value: { speaker: "sys", moves: event.value } })),
                   ],
                 },

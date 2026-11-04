@@ -6,7 +6,7 @@ import { namesTitle } from "../core/util";
 
 const { dialogue: d } = settings;
 
-/** What Jake may say about a movie: only these facts (the prompt forbids anything else). Missing facts are left out. */
+/** What Elisa may say about a movie: only these facts (the prompt forbids anything else). Missing facts are left out. */
 const facts = (m: Movie, descriptionChars: number) => ({
   title: m.title,
   year: m.year,
@@ -26,7 +26,7 @@ export async function respond(llm: LlmClient, is: InformationState): Promise<Rep
   const lastUser = [...is.history].reverse().find((t) => t.speaker === "usr");
   if (lastUser?.text === d.silenceMarker) return { say: utterances.noInput };
 
-  // Jake suggests once he knows some taste and the user has spoken often enough for him to have asked one question.
+  // Elisa suggests once there is some taste and the user has spoken `minUserTurns` times, so a few questions came first.
   const userTurns = is.history.filter((t) => t.speaker === "usr" && t.text !== d.silenceMarker).length;
   const accepted = is.accepted === undefined ? undefined : is.recommended.find((m) => m.id === is.accepted);
   const mode: Mode = accepted ? "wrapup" : hasTaste(is) && userTurns >= d.minUserTurns ? "recommend" : "explore";

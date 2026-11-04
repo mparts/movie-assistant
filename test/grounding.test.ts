@@ -8,10 +8,10 @@ import { respond } from "../src/dialogue/respond";
 
 const movie = (id: number, title: string): Movie => ({ id, title, genres: ["Comedy"], rating: 7, votes: 100, overview: "A film" });
 const llmSays = (out: unknown) => ({ json: vi.fn(async () => out) }) as unknown as LlmClient & { json: ReturnType<typeof vi.fn> };
-/** A state right after the assistant suggested `title`, saying `jake`. */
-const after = (title: string | null, jake: string): IS => {
+/** A state right after the assistant suggested `title`, saying `elisa`. */
+const after = (title: string | null, elisa: string): IS => {
   const is = freshIS();
-  is.history = [{ speaker: "sys", text: jake }];
+  is.history = [{ speaker: "sys", text: elisa }];
   if (title) {
     is.recommended = [movie(1, title)];
     is.qud = "suggestion";
@@ -46,7 +46,7 @@ describe("A: a bare yes after a suggestion is an accept, without the LLM", () =>
     expect(rules.get_latest_move({ is: accepted, latest_moves: [{ type: "say", text: "Enjoy!" }], latest_speaker: "sys" })!().accepted).toBe(1);
   });
 
-  test("after an accept, Jake wraps up: no candidates, no new suggestion", async () => {
+  test("after an accept, Elisa wraps up: no candidates, no new suggestion", async () => {
     const is = after("About Time", "How about About Time?");
     is.accepted = 1;
     is.candidates = [movie(2, "Other Film")];
@@ -76,18 +76,18 @@ describe("wrap-up with a duplicate title", () => {
 });
 
 describe("B: moves the user's words do not support are dropped", () => {
-  const jake = "Back to the Future has that fun, goofy vibe with a sweet hint of romance, perfect for a light date night.";
+  const elisa = "Back to the Future has that fun, goofy vibe with a sweet hint of romance, perfect for a light date night.";
   test("a wish made of the assistant's words is dropped; the user's own (or a bare yes to it) is kept", () => {
     const copied: Move[] = [{ type: "wish", text: "A goofy movie for a light date night." }];
-    expect(ground(copied, "the second one", jake, null)).toEqual([]);
-    expect(ground(copied, "goofy sounds right, a date night", jake, null)).toEqual(copied);
-    expect(ground(copied, "yes!", jake, null)).toEqual(copied);
+    expect(ground(copied, "the second one", elisa, null)).toEqual([]);
+    expect(ground(copied, "goofy sounds right, a date night", elisa, null)).toEqual(copied);
+    expect(ground(copied, "yes!", elisa, null)).toEqual(copied);
     // Only the words a rewrite adds count: the old wish's words are not "copied".
-    expect(ground([{ type: "wish", text: "A cozy, funny movie." }], "funnier", jake, null, "A cozy movie.")).toHaveLength(1);
+    expect(ground([{ type: "wish", text: "A cozy, funny movie." }], "funnier", elisa, null, "A cozy movie.")).toHaveLength(1);
   });
 
   test("a person needs their name in the user's words", () => {
-    expect(ground([{ type: "person", name: "Michael J. Fox" }], "sounds fun", jake, null)).toEqual([]);
+    expect(ground([{ type: "person", name: "Michael J. Fox" }], "sounds fun", elisa, null)).toEqual([]);
     expect(ground([{ type: "person", name: "Christopher Nolan" }], "a nolan movie", undefined, null)).toHaveLength(1);
   });
 

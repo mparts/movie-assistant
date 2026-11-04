@@ -27,7 +27,7 @@ describe("guards on the LLM", () => {
     return is;
   };
 
-  test("before Jake may suggest, naming a candidate is blocked (whole word) and falls back", async () => {
+  test("before Elisa may suggest, naming a candidate is blocked (whole word) and falls back", async () => {
     const llm = fakeLlm({ say: "How about Example tonight?", recommend: null });
     expect(await respond(llm, early())).toEqual({ say: utterances.exploreFallback, mode: "explore" });
     expect(llm.json).toHaveBeenCalledTimes(settings.dialogue.respondAttempts);
@@ -43,7 +43,8 @@ describe("guards on the LLM", () => {
   test("a candidate named without its id still counts as the suggestion", async () => {
     // Found in a spoken browser run: the suggestion was never recorded, so "yeah this works" could not accept it.
     const is = early();
-    is.history.push({ speaker: "sys", text: "Fun or epic?" }, { speaker: "usr", text: "epic" });
+    while (is.history.filter((t) => t.speaker === "usr").length < settings.dialogue.minUserTurns)
+      is.history.push({ speaker: "sys", text: "Fun or epic?" }, { speaker: "usr", text: "epic" });
     const llm = fakeLlm({ say: "How about Example tonight?", recommend: null });
     expect(await respond(llm, is)).toEqual({ say: "How about Example tonight?", movieId: 42, mode: "recommend" });
   });

@@ -60,7 +60,7 @@ export function stateSummary(is: IS): Record<string, unknown> {
 
 export const lastSuggested = (is: IS): string | null => last(is.recommended)?.title ?? null;
 
-/** The user's positive taste as one line, for Jake. */
+/** The user's positive taste as one line, for Elisa. */
 export function tasteProfile(is: IS): string | null {
   const parts: string[] = [];
   if (is.wish) parts.push(`They want: ${is.wish}`);

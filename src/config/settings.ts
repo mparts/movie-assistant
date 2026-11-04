@@ -18,10 +18,10 @@ export const settings = {
     suggestedDetails: 5,
     /** Description length per movie in the prompt. */
     descriptionChars: { candidate: 220, suggested: 400 },
-    /** Top-billed actors Jake is told about per movie (the catalogue keeps `search.castShown`). */
+    /** Top-billed actors Elisa is told about per movie (the catalogue keeps `search.castShown`). */
     castInFacts: 3,
-    /** Jake suggests once there is taste and the user has spoken this many times (silence does not count). */
-    minUserTurns: 2,
+    /** Elisa suggests once there is taste and the user has spoken this many times (silence does not count). */
+    minUserTurns: 4,
     /**
      * A reply that is ONLY agreement ("yes", "sounds good", "let's go with that"), judged on the lowercased text with
      * punctuation and apostrophes removed ("let's" → "lets"). Right after a suggested movie it means "I'll take it"
@@ -45,7 +45,7 @@ export const settings = {
      * local model (not in this list) stays last, as a last resort.
      */
     understand: { temperature: 0, maxTokens: 800, purpose: "NLU", prefer: ["ollama", "groq"] as string[] | undefined },
-    /** Jake's replies: no preference, so the configured order applies (Groq first, then the others as fallbacks). */
+    /** Elisa's replies: no preference, so the configured order applies (Groq first, then the others as fallbacks). */
     respond: { temperature: 0.7, maxTokens: 1200, purpose: "NLG", prefer: undefined as string[] | undefined },
   },
 
@@ -89,7 +89,7 @@ export const settings = {
     minVotes: 100,
     /** Parallel TMDB requests when walking every page of a query (the pool, the catalogue) or fetching details. */
     walkConcurrency: 20,
-    /** Top-billed actors kept per movie (for "something with Keanu Reeves" and for Jake's facts). */
+    /** Top-billed actors kept per movie (for "something with Keanu Reeves" and for Elisa's facts). */
     castShown: 5,
     /** TMDB answers 429 when called too fast: wait this long, then retry this many times before giving up. */
     retryDelayMs: 1000,
@@ -121,7 +121,7 @@ export const settings = {
 
   speech: {
     locale: "en-US",
-    voice: "en-US-DavisNeural",
+    voice: "en-US-JennyNeural",
     noInputTimeoutMs: 7000,
     completeTimeoutMs: 0,
     bargeIn: false as false,

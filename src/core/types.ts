@@ -58,10 +58,10 @@ export type Move =
 
 export type MoveOf<T extends Move["type"]> = Extract<Move, { type: T }>;
 
-/** How Jake was told to reply this turn (prompts.ts `respondModes`). */
+/** How Elisa was told to reply this turn (prompts.ts `respondModes`). */
 export type NlgMode = "explore" | "recommend" | "wrapup";
 
-/** What Jake's last turn left open: a taste question, the movie he suggested, or nothing. */
+/** What Elisa's last turn left open: a taste question, the movie Elisa suggested, or nothing. */
 export type Qud = "taste" | "suggestion" | "none";
 
 /** What the system says in one turn. No mode for scripted turns that leave the question open as it was. */
@@ -95,7 +95,7 @@ export interface InformationState {
   recommended: Movie[]; // in order shown; last = focus
   /** "no" = turned down (similar movies sink); "seen" = already watched (only removed). */
   rejected: { id: number; reason: "seen" | "no" }[];
-  /** What Jake's last turn left open. */
+  /** What Elisa's last turn left open. */
   qud: Qud;
   /** Id of the suggested movie the user accepted. Cleared when they say anything substantive afterwards. */
   accepted?: number;
@@ -161,7 +161,7 @@ export interface DMEContext extends TotalInformationState {
   vectors: Map<string, Float32Array>;
 }
 
-/** Browser top level. `is` exists once the settings form is done; `jakeSaid` is Jake's last line, shown on screen. */
+/** Browser top level. `is` exists once the settings form is done; `elisaSaid` is Elisa's last line, shown on screen. */
 export interface DMContext {
   ssRef: any;
   embedQuery: EmbedQuery;
@@ -172,7 +172,7 @@ export interface DMContext {
   /** Why loading tonight's movies failed, shown on the pool-check screen. */
   poolError?: string;
   lastUtterance?: string;
-  jakeSaid?: string;
+  elisaSaid?: string;
 }
 
 export type DMEvent =

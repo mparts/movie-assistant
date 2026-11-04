@@ -35,8 +35,8 @@ export async function understand(llm: LlmClient, text: string, is: InformationSt
   const suggested = lastSuggested(is);
   const lastTurn = is.history[is.history.length - 1];
   const lastSystem = lastTurn?.speaker === "sys" ? lastTurn.text : undefined;
-  // A bare "yes" / "let's go with that" right after Jake named his suggestion is taking it: no LLM needed (and none
-  // gets it wrong). After any other turn of his (an answer, or "want something lighter?") the LLM decides.
+  // A bare "yes" / "let's go with that" right after Elisa named the suggestion is taking it: no LLM needed (and none
+  // gets it wrong). After any other turn of Elisa's (an answer, or "want something lighter?") the LLM decides.
   if (suggested && is.qud === "suggestion" && lastSystem && namesTitle(lastSystem, suggested) && isAffirmation(text))
     return [{ type: "accept" }];
 

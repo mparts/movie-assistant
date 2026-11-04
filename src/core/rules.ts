@@ -146,7 +146,7 @@ export const rules: Record<string, Rule> = {
     });
   },
 
-  /** What Jake's turn left open, from the mode he replied in. A recommend turn without a movie leaves it as it was. */
+  /** What Elisa's turn left open, from the mode of the reply. A recommend turn without a movie leaves it as it was. */
   integrate_qud: ({ is }) => {
     const lu = is.shared.lu;
     if (lu?.speaker !== "sys") return;

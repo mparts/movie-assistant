@@ -104,7 +104,7 @@ export function repairMoves(moves: Move[], wish: string, raw: unknown[]): Move[]
 
 /**
  * Did these words come from the assistant rather than the user? True when all of `fresh` are in the assistant's
- * last turn and none in the user's words: "cozy" offered by Jake and answered with "the second one, please".
+ * last turn and none in the user's words: "cozy" offered by Elisa and answered with "the second one, please".
  */
 const copied = (fresh: string[], utterance: string, lastSystem: string | undefined) =>
   !!lastSystem && fresh.length > 0 && fresh.every((x) => mentions(lastSystem, x)) && !fresh.some((x) => mentions(utterance, x));
@@ -120,7 +120,7 @@ export function ground(moves: Move[], utterance: string, lastSystem: string | un
         return titleSaid(m.name, utterance);
       case "wish": {
         if (words(m.text).every((w) => HEDGE.has(w))) return false; // "not sure yet" is not a taste
-        // Only the words the rewrite adds to the old wish count. A bare "yes" to Jake's proposal takes it.
+        // Only the words the rewrite adds to the old wish count. A bare "yes" to Elisa's proposal takes it.
         const fresh = content(m.text).filter((x) => !mentions(wish, x));
         return isAffirmation(utterance) || !copied(fresh, utterance, lastSystem);
       }
