@@ -8,7 +8,7 @@ import { last } from "./util";
 export const initialIS = (intake: Intake): IS => ({
   intake,
   next_moves: [],
-  private: { agenda: [], notices: [] },
+  private: { notices: [] },
   shared: {},
   history: [],
   readiness: { meaningfulTurns: 0, evidence: [] },
@@ -17,8 +17,6 @@ export const initialIS = (intake: Intake): IS => ({
   avoidGenres: [],
   avoid: [],
   people: [],
-  seeds: [],
-  constraints: { year: {} },
   candidates: [],
   recommended: [],
   rejected: [],
@@ -26,9 +24,8 @@ export const initialIS = (intake: Intake): IS => ({
   qud: "none",
 });
 
-/** Taste = a wish, a wanted genre, a liked movie, or a wanted person. Filters and dislikes alone are not taste. */
-export const hasTaste = (is: IS) =>
-  !!is.wish || is.genres.length > 0 || is.seeds.length > 0 || is.people.some((p) => !p.negated);
+/** Taste = a wish, a wanted genre, or a wanted person. Filters and dislikes alone are not taste. */
+export const hasTaste = (is: IS) => !!is.wish || is.genres.length > 0 || is.people.some((p) => !p.negated);
 
 /** Phase 1 as TMDB filters: the pool is every movie that passes them. The chat can only narrow this, locally. */
 export function poolCriteria({ profile, tonight }: Intake): SearchCriteria {
@@ -44,7 +41,6 @@ export function poolCriteria({ profile, tonight }: Intake): SearchCriteria {
 
 /** Compact view of what the system currently believes, for the LLM prompts. Empty fields are omitted. */
 export function stateSummary(is: IS): Record<string, unknown> {
-  const { year, language } = is.constraints;
   const { profile, tonight } = is.intake;
   const o: Record<string, unknown> = {
     // From the settings form: fixed for this conversation, never asked again.
@@ -59,16 +55,12 @@ export function stateSummary(is: IS): Record<string, unknown> {
   };
   if (is.wish) o.wish = is.wish;
   if (is.genres.length) o.wantedGenres = is.genres;
-  if (is.seeds.length) o.likesMoviesLike = is.seeds.map((m) => m.title);
   const wanted = is.people.filter((p) => !p.negated).map((p) => p.name);
   const unwanted = is.people.filter((p) => p.negated).map((p) => p.name);
   if (wanted.length) o.wantedPeople = wanted;
   if (is.avoidGenres.length) o.avoidGenres = is.avoidGenres;
   if (is.avoid.length) o.avoid = is.avoid;
   if (unwanted.length) o.avoidPeople = unwanted;
-  if (year.min !== undefined) o.fromYear = year.min;
-  if (year.max !== undefined) o.toYear = year.max;
-  if (language) o.originalLanguage = language;
   return o;
 }
 
@@ -79,7 +71,6 @@ export function tasteProfile(is: IS): string | null {
   const parts: string[] = [];
   if (is.wish) parts.push(`They want: ${is.wish}`);
   if (is.genres.length) parts.push(`Genres: ${is.genres.join(", ")}.`);
-  if (is.seeds.length) parts.push(`Movies they like: ${is.seeds.map((m) => m.title).join("; ")}.`);
   const wanted = is.people.filter((p) => !p.negated).map((p) => p.name);
   if (wanted.length) parts.push(`With: ${wanted.join(", ")}.`);
   return parts.join(" ") || null;

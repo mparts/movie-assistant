@@ -1,10 +1,9 @@
 /**
  * Labelled wishes for `npm run rank-bench` (first written for the step 5 spike). `said`: the user's own words. `wish`:
  * the same, rewritten as a movie description (what the NLU keeps). `avoid`: things to avoid, kept out of the wish.
- * `like`: a movie they love ("something like X"). `good`: titles that should reach the top 10 ("Robin Hood (1973)"
- * pins a version). `bad` / `badKeywords`: titles or TMDB keywords that must not. Family labels were written before
- * the spike's round 3; adult labels were picked from a genre-and-votes list, not from rankings. The "like" cases reuse
- * the labels of the wish with the same theme.
+ * `good`: titles that should reach the top 10 ("Robin Hood (1973)" pins a version). `bad` / `badKeywords`: titles or
+ * TMDB keywords that must not. Family labels were written before the spike's round 3; adult labels were picked from a
+ * genre-and-votes list, not from rankings.
  */
 export type Wish = {
   name: string;
@@ -12,7 +11,6 @@ export type Wish = {
   wish: string;
   genres: string[];
   avoid?: string[];
-  like?: string;
   good: string[];
   bad?: string[];
   badKeywords?: string[];
@@ -134,23 +132,4 @@ export const ADULT: Wish[] = [
     good: ["Mad Max: Fury Road", "Furious 7", "Fast & Furious 6", "The Fast and the Furious", "Fast Five", "The Fate of the Furious", "2 Fast 2 Furious", "Fast & Furious", "The Fast and the Furious: Tokyo Drift", "Mission: Impossible - Fallout", "Extraction"],
     badKeywords: ["superhero", "based on comic", "marvel cinematic universe (mcu)", "dc extended universe (dceu)"],
   },
-];
-
-const byName = (list: Wish[], name: string) => list.find((w) => w.name === name)!;
-
-/** "Something like X": run with the liked movie alone, and with it plus the wish of the same theme. */
-export const LIKE_FAMILY: Wish[] = [
-  { ...byName(FAMILY, "cozy, funny, talking animals"), name: "like Zootopia", said: "something like Zootopia", like: "Zootopia",
-    good: byName(FAMILY, "cozy, funny, talking animals").good.filter((t) => t !== "Zootopia") },
-  { ...byName(FAMILY, "laugh and cry"), name: "like Coco", said: "something like Coco", like: "Coco",
-    good: byName(FAMILY, "laugh and cry").good.filter((t) => t !== "Coco") },
-];
-
-export const LIKE_ADULT: Wish[] = [
-  { ...byName(ADULT, "mind-bending sci-fi"), name: "like Inception", said: "something like Inception", like: "Inception",
-    good: byName(ADULT, "mind-bending sci-fi").good.filter((t) => t !== "Inception") },
-  { ...byName(ADULT, "clever fun heist"), name: "like Ocean's Eleven", said: "something like Ocean's Eleven", like: "Ocean's Eleven",
-    good: byName(ADULT, "clever fun heist").good.filter((t) => t !== "Ocean's Eleven") },
-  { ...byName(ADULT, "scary but not gory"), name: "like The Conjuring", said: "something like The Conjuring", like: "The Conjuring",
-    good: byName(ADULT, "scary but not gory").good.filter((t) => t !== "The Conjuring") },
 ];

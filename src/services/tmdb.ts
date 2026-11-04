@@ -138,11 +138,5 @@ export function createTmdb(o: TmdbOptions): TmdbClient {
         keywords: ((d.keywords?.keywords ?? []) as any[]).map((k) => String(k.name)),
       };
     },
-    async searchMovie(title) {
-      const g = await loadGenres();
-      const data = await get("/search/movie", { query: title, include_adult: "false", page: "1" });
-      const hit = (data.results as any[])[0];
-      return hit ? toMovie(hit, g.byId) : null;
-    },
   };
 }

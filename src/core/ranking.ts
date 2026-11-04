@@ -4,8 +4,8 @@
  *   score = 0.8·semantic + 0.1·genres + 0.1·popularity − avoid − reject + person      (settings.ranking)
  *
  * Every term but `person` is a percentile within the movies still eligible, so the weights compare like with like.
- * semantic: similarity to the wish, or to a liked movie, whichever is higher. avoid / reject: a penalty only for the
- * movies most similar to an avoid text / a turned-down movie. person: a wanted actor or director is in it.
+ * semantic: similarity to the wish. avoid / reject: a penalty only for the movies most similar to an avoid text /
+ * a turned-down movie. person: a wanted actor or director is in it.
  */
 import { settings } from "../config/settings";
 import type { Pool } from "./pool";
@@ -13,10 +13,9 @@ import type { InformationState as IS, Movie } from "./types";
 
 const R = settings.ranking;
 
-/** The query side: vectors of the wish, the liked movies, and the avoid texts (any may be missing). */
+/** The query side: vectors of the wish and the avoid texts (any may be missing). */
 export interface QueryVectors {
   wish?: Float32Array;
-  seeds: Float32Array[];
   avoid: Float32Array[];
 }
 
@@ -49,19 +48,15 @@ export function featuresPerson(movie: Movie, name: string): boolean {
 
 /* ---- filters ---- */
 
-/** Movies that may be suggested: not suggested, seen, turned down or liked already; inside every filter. */
+/** Movies that may be suggested: not suggested, seen or turned down already; inside every filter. */
 export function eligible(is: IS, movies: Movie[]): Movie[] {
-  const out = new Set([...is.recommended.map((m) => m.id), ...is.rejected.map((r) => r.id), ...is.seeds.map((m) => m.id)]);
-  const { year, language } = is.constraints;
+  const out = new Set([...is.recommended.map((m) => m.id), ...is.rejected.map((r) => r.id)]);
   const unwanted = is.people.filter((p) => p.negated);
   return movies.filter(
     (m) =>
       !out.has(m.id) &&
       !m.genres.some((g) => is.avoidGenres.includes(g)) &&
-      !unwanted.some((p) => featuresPerson(m, p.name)) &&
-      (year.min === undefined || (m.year !== undefined && m.year >= year.min)) &&
-      (year.max === undefined || (m.year !== undefined && m.year <= year.max)) &&
-      (!language || m.language === language)
+      !unwanted.some((p) => featuresPerson(m, p.name))
   );
 }
 
@@ -121,7 +116,7 @@ export function rankPool(is: IS, pool: Pool, q: QueryVectors): Scored[] {
     return percentiles(movies.map((m) => sims[index.get(m.id)!]));
   };
 
-  const semanticSources = [...(q.wish ? [q.wish] : []), ...q.seeds].map(pctOf);
+  const semanticSources = (q.wish ? [q.wish] : []).map(pctOf);
   const avoids = q.avoid.map(pctOf);
   const turnedDown = is.rejected.flatMap((r) => {
     const v = r.reason === "no" ? pool.vectors.get(r.id) : undefined;

@@ -83,7 +83,10 @@ export async function respond(llm: LlmClient, is: InformationState): Promise<Rep
         console.warn(`[respond] LLM recommended id ${id}, which is not a candidate; retrying`);
         continue;
       }
-      return { say, movieId: id, mode };
+      // The LLM sometimes names a candidate but leaves "recommend" empty. Without the id the suggestion is never
+      // recorded, so a "yes" to it cannot be accepted. Take the one candidate it named.
+      const named = id === undefined ? pool.filter((m) => m.title.length >= 4 && mentions(say, m.title)) : [];
+      return { say, movieId: named.length === 1 ? named[0].id : id, mode };
     }
     if ((mode !== "wrapup" && id !== undefined) || forbiddenTitles.some((t) => mentions(say, t))) {
       console.warn("[respond] Premature recommendation blocked; retrying");

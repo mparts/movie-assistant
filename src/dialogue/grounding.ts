@@ -145,52 +145,6 @@ export function repairMoves(moves: Move[], wish: string, raw: unknown[]): Move[]
   return out;
 }
 
-/** Chat, reference and filler words: they carry no taste, so they need not show up in the moves. */
-const FILLER = new Set([
-  "something", "some", "want", "wanna", "would", "could", "can", "should", "please", "yeah", "yes", "yep", "yeap", "nah", "nope", "lets",
-  "great", "good", "nice", "cool", "fine", "alright", "okay", "thanks", "hey", "hello", "how", "are", "about", "bit", "more", "less",
-  "make", "like", "liked", "love", "loves", "prefer", "actually", "instead", "rather", "huh", "also", "even", "just", "lately", "into",
-  "kids", "family", "tonight", "watch", "first", "second", "third", "last", "those", "these", "jake", "whos", "got", "have", "has",
-  "but", "set", "been", "thing", "stuff", "kind", "sort", "type", "same", "other", "another", "too", "very", "lot", "lots",
-]);
-
-/** Hesitation sounds, however they are spelled: "hhmm", "hhhmmm", "uhh", "umm". */
-const SOUND = /^(h*m+|h+m*|u+h+|u+m+|e+h+|a+h+)$/;
-
-/** "dinosaurs" → "dinosaur", "funnier" → "funni", "animated" → "animat": stricter than `same`, so "animals" ≠ "animated". */
-const stem = (w: string) => w.replace(/(iest|ier|ies|ied|y)$/, "i").replace(/(ing|ed|est|er|es|s)$/, "");
-/** The same word up to its ending, or the user's word as the start of a longer one ("magic" / "magical"). */
-const sameStem = (said: string, written: string) => {
-  const a = stem(said);
-  const b = stem(written);
-  return a === b || (a.length >= 4 && written.startsWith(a));
-};
-
-/**
- * The user's content words that show up nowhere in the moves. Checked only when there are no moves at all, or when
- * there is a wish: a turn that only gives a runtime, a year or a person need not repeat its words.
- */
-export function missedWords(utterance: string, moves: Move[]): string[] {
-  if (moves.length && !moves.some((m) => m.type === "wish")) return [];
-  const written = moves.flatMap((m) => {
-    switch (m.type) {
-      case "wish":
-      case "avoid":
-        return words(m.text);
-      case "prefer":
-        return [...words(m.genre), ...wordsFor(resolveGenres(m.genre)).flatMap(words)];
-      case "person":
-        return words(m.name);
-      case "like":
-        return words(m.title);
-      default:
-        return [];
-    }
-  });
-  const said = content(utterance).filter((w) => !HEDGE.has(w) && !FILLER.has(w) && !SOUND.test(w));
-  return [...new Set(said.filter((w) => !written.some((x) => sameStem(w, x))))];
-}
-
 /**
  * Did these words come from the assistant rather than the user? True when all of `fresh` are in the assistant's
  * last turn and none in the user's words: "cozy" offered by Jake and answered with "the second one, please".
@@ -205,8 +159,6 @@ const copied = (fresh: string[], utterance: string, lastSystem: string | undefin
 export function ground(moves: Move[], utterance: string, lastSystem: string | undefined, suggested: string | null, wish = ""): Move[] {
   return moves.filter((m) => {
     switch (m.type) {
-      case "like":
-        return titleSaid(m.title, utterance);
       case "person":
         return titleSaid(m.name, utterance);
       case "wish": {

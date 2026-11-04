@@ -12,7 +12,7 @@ import { poolCheck, type Pool } from "../core/pool";
 import { initialIS } from "../core/state";
 import type { DMContext, DMEvent, NextMovesEvent } from "../core/types";
 import { createClients } from "../services";
-import { fetchPool, fetchPoolVectors } from "../services/poolVectorsClient";
+import { fetchPool } from "../services/poolVectorsClient";
 import { dme } from "../dialogue/dme";
 import { nlg } from "../dialogue/nlg";
 
@@ -138,7 +138,6 @@ const dmMachine = setup({
               tmdb: context.tmdb,
               llm: context.llm,
               embedQuery: context.embedQuery,
-              vectorsFor: fetchPoolVectors,
               pool: context.pool as Pool, // set by FindingMovies, the only way into Main
               vectors: new Map(),
               is: context.is!, // set by INTAKE_DONE

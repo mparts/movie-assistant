@@ -28,7 +28,7 @@ const clients = createClients("upstream", env, {
   onLlmAnswer: (a) =>
     console.log(`  [${a.purpose ?? "LLM"}] ${a.backend} (${a.model}) ${Math.round(a.ms)}ms${a.failed.length ? `, after ${a.failed.join(", ")} failed` : ""}`),
 });
-const { pool: loadPool, vectorsFor } = createNodePool(clients.tmdb, console.log);
+const { pool: loadPool } = createNodePool(clients.tmdb, console.log);
 const enabledBackends = llmBackends.filter((b) => b.enabled !== false);
 const order = (prefer?: string | string[]) => orderByPreference(enabledBackends, prefer).map((b) => `${b.name}:${b.model}`).join(" → ");
 console.log(`NLU backends (in order): ${order(settings.llm.understand.prefer)}`);
@@ -98,7 +98,7 @@ const machine = setup({
   invoke: {
     src: "dme",
     id: "dme",
-    input: ({ self }): DMEContext => ({ parentRef: self, ...clients, vectorsFor, pool, vectors: new Map(), is: initialIS(intake) }),
+    input: ({ self }): DMEContext => ({ parentRef: self, ...clients, pool, vectors: new Map(), is: initialIS(intake) }),
   },
   on: {
     USER: {

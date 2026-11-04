@@ -39,4 +39,13 @@ describe("guards on the LLM", () => {
     const llm = fakeLlm({ say: "That sounds like a fun night out.", recommend: null });
     expect(await respond(llm, is)).toEqual({ say: "That sounds like a fun night out.", mode: "explore" });
   });
+
+  test("a candidate named without its id still counts as the suggestion", async () => {
+    // Found in a spoken browser run: the suggestion was never recorded, so "yeah this works" could not accept it.
+    const is = early();
+    is.wish = "An exciting adventure.";
+    is.readiness = { meaningfulTurns: 2, evidence: ["wish:an exciting adventure.", "prefer:adventure"] };
+    const llm = fakeLlm({ say: "How about Example tonight?", recommend: null });
+    expect(await respond(llm, is)).toEqual({ say: "How about Example tonight?", movieId: 42, mode: "recommend" });
+  });
 });

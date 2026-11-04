@@ -1,14 +1,12 @@
-/** The browser's side of the dev server's pool endpoints (vite.config.ts). */
+/** The browser's side of the dev server's pool endpoint (vite.config.ts). */
 import type { Intake } from "../core/intake";
-import type { PoolLoader, VectorSource } from "../core/pool";
+import type { PoolLoader } from "../core/pool";
 import type { Movie } from "../core/types";
 
-/** POST movies → their catalogue copies and vectors (liked movies). */
-export const poolVectorsRoute = "/pool-vectors";
 /** POST an intake → tonight's pool. */
 export const poolRoute = "/pool";
 
-/** Both endpoints answer the same way: movies as JSON (x-json-bytes long), zero-padded to 4 bytes, then Float32 rows. */
+/** The answer: movies as JSON (x-json-bytes long), zero-padded to 4 bytes, then Float32 rows. */
 async function post(route: string, body: unknown) {
   const res = await fetch(route, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
   if (!res.ok) throw new Error(`${route}: HTTP ${res.status} ${await res.text()}`);
@@ -28,10 +26,4 @@ export const fetchPool: PoolLoader = async (intake: Intake) => {
   const { movies, vectors, headers } = await post(poolRoute, intake);
   const source = headers.get("x-source") === "catalogue" ? "catalogue" : "tmdb";
   return { movies, vectors, embeddedNow: Number(headers.get("x-embedded")) || 0, ms: performance.now() - t0, source };
-};
-
-/** Liked movies: the catalogue's copy (with details) and vectors, embedded on the dev server if new. */
-export const fetchPoolVectors: VectorSource = async (movies) => {
-  const { movies: out, vectors, headers } = await post(poolVectorsRoute, movies);
-  return { movies: out, vectors, embedded: Number(headers.get("x-embedded")) || 0 };
 };

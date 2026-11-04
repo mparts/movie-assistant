@@ -50,8 +50,6 @@ export const settings = {
      * local model (not in this list) stays last, as a last resort.
      */
     understand: { temperature: 0, maxTokens: 800, purpose: "NLU", prefer: ["ollama", "groq"] as string[] | undefined },
-    /** The second, narrow call when the user's words did not reach the wish: same backends, a short answer. */
-    repair: { temperature: 0, maxTokens: 200, purpose: "NLU repair", prefer: ["ollama", "groq"] as string[] | undefined },
     /** Jake's replies: no preference, so the configured order applies (Groq first, then the others as fallbacks). */
     respond: { temperature: 0.7, maxTokens: 1200, purpose: "NLG", prefer: undefined as string[] | undefined },
   },
@@ -124,11 +122,6 @@ export const settings = {
     reject: { weight: 0.4, from: 0.9 },
     /** Added for a wanted actor or director: their movies come first. */
     person: 1,
-  },
-
-  years: {
-    /** "Recent" or "the last few years" means this many years back from today. */
-    recentYears: 5,
   },
 
   speech: {

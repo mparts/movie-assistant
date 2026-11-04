@@ -1,7 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { cases, formatTable, percentile, runBench } from "../scripts/nluBench";
-import type { LlmClient, Move } from "../src/core/types";
-import { missedWords } from "../src/dialogue/grounding";
+import type { LlmClient } from "../src/core/types";
 
 /** Answers each case's utterance with the given moves; anything else (the warm-up) gets no moves. */
 const stubFor = (answers: Record<string, unknown[]>): LlmClient => ({
@@ -22,18 +21,14 @@ const perfect: Record<string, unknown[]> = {
   "anything with Tom Hanks?": [{ type: "person", name: "Tom Hanks" }],
   "please nothing with Adam Sandler": [{ type: "person", name: "Adam Sandler", negated: true }],
   "I'm in the mood for a Nolan film": [{ type: "person", name: "Christopher Nolan" }],
-  "I only have an hour and a half tonight": [{ type: "constrain", slot: "runtime", op: "lte", value: 90 }],
   "anything but horror, I can't sleep after those": [{ type: "prefer", genre: "Horror", negated: true }],
   "oh I watched that one ages ago": [{ type: "seen" }],
   "nah, that's not for me": [{ type: "reject" }],
-  "something along the lines of Parasite": [{ type: "like", title: "Parasite" }],
-  "something like Inception, maybe even by Nolan": [{ type: "like", title: "Inception" }, { type: "person", name: "Christopher Nolan" }],
-  "do you have anything a bit shorter than that?": [{ type: "constrain", slot: "runtime", op: "lte", value: 120 }],
-  "only movies from the nineties please": [{ type: "constrain", slot: "year", op: "gte", value: 1990 }],
-  "something from the last few years": [{ type: "constrain", slot: "year", op: "gte", value: new Date().getFullYear() - 5 }],
+  "something along the lines of Parasite": [{ type: "wish", text: "A darkly funny thriller about class and a poor family, like Parasite." }],
+  "something like Inception, maybe even by Nolan": [{ type: "wish", text: "A mind-bending sci-fi heist inside dreams, like Inception." }, { type: "person", name: "Christopher Nolan" }],
   "yeap you got me... lighthearted date vibe it is!!": [{ type: "wish", text: "A lighthearted romantic comedy for a date night." }],
   "hhmm... no I do not like this.. maybe something more funny": [{ type: "reject" }, { type: "wish", text: "A funnier romantic comedy." }],
-  "yes please do that!!": [{ type: "retract", slot: "dislikes" }], // a name the NLU may use; normalised to "avoidGenres"
+  "yes please do that!!": [{ type: "prefer", genre: "Comedy" }],
   "ok that sounds great, let's watch it tonight": [{ type: "accept" }],
   "no scary stuff please": [{ type: "prefer", genre: "Horror", negated: true }],
   "something with talking animals would be great": [{ type: "wish", text: "A gentle animated adventure with talking animals." }],
@@ -69,13 +64,5 @@ describe("NLU bench", () => {
     const table = formatTable([{ model: "m1", warmupMs: 3000, summary: s }]).split("\n");
     expect(table).toHaveLength(3);
     expect(table[2]).toMatch(/^m1\s+12\/15\s+2\s+1\s+640\s+1200\s+3000$/);
-  });
-
-  test("a correct answer raises no lost-wish warning, except where it paraphrases the user's words", () => {
-    const flagged = Object.entries(perfect)
-      .map(([u, moves]) => [u, missedWords(u, moves as Move[])] as const)
-      .filter(([, missing]) => missing.length);
-    // A word check cannot see synonyms: "scary" → "creepy", "gory" → "gore".
-    expect(flagged).toEqual([["something scary with ghosts, but not gory", ["scary", "gory"]]]);
   });
 });

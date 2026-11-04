@@ -1,6 +1,6 @@
 import { SpeechStateExternalEvent } from "speechstate";
 import type { Intake } from "./intake";
-import type { Pool, VectorSource } from "./pool";
+import type { Pool } from "./pool";
 
 /** A movie as the dialogue sees it. Genres are TMDB genre *names*; only the TMDB client knows ids. */
 export interface Movie {
@@ -52,17 +52,8 @@ export type Move =
   | { type: "prefer"; genre: string; negated?: boolean }
   /** An actor or director: wanted (their movies first), or with `negated` avoided (excluded). */
   | { type: "person"; name: string; negated?: boolean }
-  | {
-      type: "constrain";
-      /** "runtime" is understood only to point the user to tonight's settings: time belongs to Phase 1. */
-      slot: "runtime" | "year" | "language";
-      op: "lte" | "gte" | "eq";
-      value: number | string;
-    }
-  | { type: "like"; title: string } // "something like Knives Out"
   | { type: "seen"; title?: string } // no title = the movie in focus
   | { type: "reject"; title?: string }
-  | { type: "retract"; slot: string }
   | { type: "accept" } // "yes, this one": they take the movie the assistant just suggested
   | { type: "noinput" }
   | { type: "say"; text: string; movieId?: number; mode?: NlgMode }; // system utterance (+ the movie it recommends)
@@ -82,16 +73,12 @@ export interface Reply {
   mode?: NlgMode;
 }
 
-/** Pending internal work: look a title up in TMDB. */
-export type Action = { type: "resolve_seed"; title: string };
-
 export type Range = { min?: number; max?: number };
 
 /** Plain JSON on purpose: loggable and diffable. Tonight's movies (the pool) are a resource, not part of it. */
 export interface InformationState {
   next_moves: Move[];
   private: {
-    agenda: Action[];
     /** things that happened behind the scenes this turn, for the LLM to mention if relevant */
     notices: string[];
   };
@@ -110,10 +97,6 @@ export interface InformationState {
   avoid: string[];
   /** Actors and directors: wanted ones rank first, avoided ones are excluded. */
   people: { name: string; negated: boolean }[];
-  /** Movies they love ("something like X"); never suggested back. */
-  seeds: Movie[];
-  /** Filters on the pool; the time limit belongs to tonight's settings. */
-  constraints: { year: Range; language?: string };
 
   /** The best-ranked movies of the pool right now (the LLM sees these), best first. */
   candidates: Movie[];
@@ -146,7 +129,6 @@ export interface TmdbClient {
   pool(criteria: SearchCriteria): Promise<Movie[]>;
   /** Runtime, credits and keywords of one movie (one request). Throws on errors. */
   details(id: number): Promise<MovieDetails>;
-  searchMovie(title: string): Promise<Movie | null>;
 }
 
 export type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
@@ -183,11 +165,9 @@ export interface DMEContext extends TotalInformationState {
   tmdb: TmdbClient;
   llm: LlmClient;
   embedQuery: EmbedQuery;
-  /** The catalogue's copy and vector of a movie (for liked movies, which may be outside tonight's pool). */
-  vectorsFor: VectorSource;
   /** Tonight's movies, loaded when Phase 1 ended: what gets ranked. */
   pool: Pool;
-  /** Query vectors by text, and liked movies' vectors by `movie:<id>`. Outside the IS: not plain JSON. */
+  /** Query vectors by text. Outside the IS: not plain JSON. */
   vectors: Map<string, Float32Array>;
 }
 

@@ -4,11 +4,6 @@
 import type { Company, Intake } from "../core/intake";
 import { GENRES } from "../core/lexicon";
 import type { Qud } from "../core/types";
-import { settings } from "./settings";
-
-const thisYear = new Date().getFullYear();
-/** The earliest year that still counts as "recent". */
-const recentFrom = thisYear - settings.years.recentYears;
 
 const openingByCompany: Record<Company, string> = {
   alone: "A movie night just for you, nice. What are you in the mood for?",
@@ -35,10 +30,6 @@ export const utterances = {
 export const notices = {
   understandFailed:
     "You could not process what the user just said because of a technical problem; ask them to repeat it.",
-  seedNotFound: (title: string) => `No movie called "${title}" was found in the database.`,
-  dbUnreachable: "The movie database could not be reached.",
-  timeInSettings:
-    "The user asked about the movie's length. The time limit is part of tonight's settings and every candidate already fits it; to change it they press \"Change tonight's settings\".",
   personNotInPool: (name: string) => `None of tonight's movies feature ${name}.`,
 };
 
@@ -48,19 +39,15 @@ export const understandCore = `You turn ONE spoken utterance from a person who i
 Record only what the person actually expressed. Greetings, small talk, or questions to the assistant give {"moves":[]}.
 
 Move types:
-{"type":"wish","text":"<description>"}  what they want to watch, written as ONE short description of the movie (its story, mood, feel, setting), like a blurb. Whenever their taste changes, write the WHOLE updated wish: start from "whatWeKnow.wish" (if any) and fold in what they just said, keeping what still holds. Never put negations in it ("no", "not", "without", "non-"), and never a genre or person they don't want: those go in "avoid", a negated genre or a negated person instead. Relative requests about the last suggestion ("funnier", "less dark", "more action") also rewrite the wish
+{"type":"wish","text":"<description>"}  what they want to watch, written as ONE short description of the movie (its story, mood, feel, setting), like a blurb. Whenever their taste changes, write the WHOLE updated wish: start from "whatWeKnow.wish" (if any) and fold in what they just said, keeping what still holds. Never put negations in it ("no", "not", "without", "non-"), and never a genre or person they don't want: those go in "avoid", a negated genre or a negated person instead. Relative requests about the last suggestion ("funnier", "less dark", "more action") also rewrite the wish. A movie they name as one they love or want something similar to ("something like X", "I loved X") also goes in the wish: describe what that movie is like, then add "like <title>". An actor or director they name is always a separate "person" move, never part of the wish
 {"type":"avoid","text":"<short phrase>"}  something they do NOT want that is not a genre and not a person, written positively as the thing itself: "princesses", "sad endings", "gore", "christmas"
 {"type":"prefer","genre":"<genre>"}  they name a genre they want; add "negated":true if they do NOT want it ("no horror")
 {"type":"person","name":"<full name>"}  they want an actor or director ("something with Tom Hanks", "a Nolan movie"); add "negated":true if they do NOT want them
-{"type":"like","title":"<movie title>"}  they name a movie they love or want something similar to ("something like X"): ALWAYS record it, also next to other moves
-{"type":"constrain","slot":"year|language|runtime","op":"lte|gte|eq","value":<number, or language name>}  year as a 4-digit number ("newer than that" = gte the suggested movie's year); runtime in minutes, also for "shorter" or "longer" without a number (your best guess)
 {"type":"seen","title":"<optional>"}  they already watched a movie; omit title if they mean the one just suggested
 {"type":"reject","title":"<optional>"}  they don't want that particular movie; omit title if they mean the one just suggested
-{"type":"retract","slot":"wish|genres|avoidGenres|avoid|people|year|language"}  they drop an earlier requirement
-{"type":"accept"}  they take the movie the assistant just suggested: "yes", "this one", "let's watch it". Never use "like" or "seen" for that
+{"type":"accept"}  they take the movie the assistant just suggested: "yes", "this one", "let's watch it". Never use "seen" for that
 
 Genres are exactly: ${GENRES.join(", ")}. A mood or feeling ("funny", "scary", "cozy") is NOT a genre move: it goes in the wish.
-Today's year is ${thisYear}. "Recent" or "the last few years" means ${recentFrom} or later.
 Use the conversation and the known state to resolve "that", "it", "the first one". Several moves per utterance are fine. Speech recognition may mishear titles and names: if one looks misheard, write the most likely real title or name.
 The assistant's last turn is context, not the person's words: never record something only the assistant said, including the options it offered.
 
@@ -68,12 +55,11 @@ Examples:
 "something cozy to watch with my girlfriend" -> {"moves":[{"type":"wish","text":"A cozy, warm romantic movie for a relaxed date night."}]}
 (whatWeKnow.wish is "A cozy, warm romantic movie for a relaxed date night.") "maybe a bit funny too" -> {"moves":[{"type":"wish","text":"A cozy, funny romantic comedy for a relaxed date night."}]}
 "an adventure for the kids, but nothing with princesses" -> {"moves":[{"type":"wish","text":"An exciting family adventure that kids will love."},{"type":"avoid","text":"princesses"}]}
-"no horror please, and something recent" -> {"moves":[{"type":"prefer","genre":"Horror","negated":true},{"type":"constrain","slot":"year","op":"gte","value":${recentFrom}}]}
-"I loved Knives Out" -> {"moves":[{"type":"like","title":"Knives Out"}]}
-"something like Arrival, maybe even with Amy Adams" -> {"moves":[{"type":"like","title":"Arrival"},{"type":"person","name":"Amy Adams"}]}
+"I loved Knives Out" -> {"moves":[{"type":"wish","text":"A witty, twisty whodunit full of eccentric suspects, like Knives Out."}]}
+"something like Arrival, maybe even with Amy Adams" -> {"moves":[{"type":"wish","text":"A thoughtful, emotional sci-fi drama about first contact with aliens, like Arrival."},{"type":"person","name":"Amy Adams"}]}
 "anything but horror, I can't sleep after those" -> {"moves":[{"type":"prefer","genre":"Horror","negated":true}]}
 "anything with Keanu Reeves? but please no Adam Sandler" -> {"moves":[{"type":"person","name":"Keanu Reeves"},{"type":"person","name":"Adam Sandler","negated":true}]}
-"I only have about ninety minutes" -> {"moves":[{"type":"constrain","slot":"runtime","op":"lte","value":90}]}
+"I only have about ninety minutes" -> {"moves":[]}
 "please, nothing with Will Ferrell" -> {"moves":[{"type":"person","name":"Will Ferrell","negated":true}]}
 "hi, how are you?" -> {"moves":[]}`;
 
@@ -84,7 +70,7 @@ The assistant just asked about their taste, maybe offering options. If the perso
 (the assistant had asked "more of a cozy night, or something with some action?") "the cozy one, definitely" -> {"moves":[{"type":"wish","text":"A cozy, heartwarming feel-good movie."}]}
 (same question) "hmm, no idea, you pick" -> {"moves":[]}`,
   suggestion: `
-The assistant just suggested the movie in "lastSuggestedMovie". If they describe what they'd rather have (a topic, a setting, who it's for), that is new taste, even without a "no": rewrite the wish with their words. The suggested movie is the assistant's pick, never a "like". Keep the exact words the person used for anything new (a topic, a creature, a setting, a mood); never swap them for a similar word from the old wish. A "no" belongs only to the words right after it: "no, not that one, something funnier" rejects the movie and makes the wish funnier; it does not avoid comedy.
+The assistant just suggested the movie in "lastSuggestedMovie". If they describe what they'd rather have (a topic, a setting, who it's for), that is new taste, even without a "no": rewrite the wish with their words. The suggested movie is the assistant's pick: never add it to the wish as a movie they like. Keep the exact words the person used for anything new (a topic, a creature, a setting, a mood); never swap them for a similar word from the old wish. A "no" belongs only to the words right after it: "no, not that one, something funnier" rejects the movie and makes the wish funnier; it does not avoid comedy.
 "I've already seen that one" -> {"moves":[{"type":"seen"}]}
 "it isn't even christmas" (after a christmas movie was suggested) -> {"moves":[{"type":"reject"},{"type":"avoid","text":"christmas"}]}
 (whatWeKnow.wish is "A light romantic movie for a date night.") "nope, not that one... got anything funnier?" -> {"moves":[{"type":"reject"},{"type":"wish","text":"A funny, light romantic comedy for a date night."}]}
@@ -92,21 +78,9 @@ The assistant just suggested the movie in "lastSuggestedMovie". If they describe
 (whatWeKnow.wish is "A light romantic movie for a date night.") "my girlfriend is really into horses" -> {"moves":[{"type":"wish","text":"A light romantic movie with horses for a date night."}]}`,
   change: `
 The assistant just offered to drop or loosen something. A "yes" to a question that proposed something other than a movie means that thing: record the move that carries it out.
-(the assistant had asked "want me to drop the horror ban?") "yes, go for it" -> {"moves":[{"type":"retract","slot":"avoidGenres"}]}`,
+(the assistant had asked "want me to drop the horror ban?") "yes, go for it" -> {"moves":[{"type":"prefer","genre":"Horror"}]}`,
   none: "",
 };
-
-/** Puts the user's lost words back into the wish, when the first call left them out. */
-export const repairWishSystem = `A person choosing a movie just said something, and some of their words were lost when it was written down as a wish. Output ONLY a JSON object: {"wish":"<description>"} or {"wish":null}.
-
-"wish" is what they want to watch, as ONE short description of the movie (its story, mood, feel, setting), like a blurb. Start from the given "wish" (if any), keep what still holds, and work in "missingWords" as the person meant them, in their own words. Never put negations in it.
-If nothing in the utterance says what they want to watch (only a question about a movie, small talk, or a reaction), answer {"wish":null}.
-"assistantSaid" is context only: never take words from it.
-
-Examples:
-{"wish":"A gentle animated adventure.","utterance":"something funny with horses","missingWords":["horses"]} -> {"wish":"A funny animated adventure with horses."}
-{"wish":null,"utterance":"something set in the mountains","missingWords":["mountains"]} -> {"wish":"A movie set in the mountains."}
-{"wish":"A cozy romantic comedy.","utterance":"is it long","missingWords":["long"]} -> {"wish":null}`;
 
 /** Jake: decides what to say and which candidate (if any) to suggest. */
 export const respondSystem = `You are Jake, a warm, easygoing friend who knows movies well, talking out loud with someone to help them decide what to watch tonight. Everything you write is spoken aloud: use 1 to 3 short, natural sentences. No lists, no markdown, no emojis, no stage directions.
@@ -119,7 +93,7 @@ How to behave:
 - Have a real conversation. React to what they just said first. Be curious about them, not about a checklist.
 - Gradually get a feel for their taste: what they've enjoyed lately, their mood, the kind of story they want. Ask at most ONE light question per turn, and only when it helps. Never ask for something you already know (see "whatWeKnow"). Never interrogate.
 - "whatWeKnow.tonight" comes from the settings they filled in (their name, who is watching, the youngest viewer's age, time limit, genres to avoid, streaming services). It is already applied to tonight's movies, so every candidate already suits the youngest viewer and fits the time limit: never ask about any of it (not even "kid-friendly or grown-up?"). If they want to change it, tell them to change tonight's settings.
-- "whatWeKnow" also holds what they told you: "wish" (the movie they want, in a sentence), wantedGenres, likesMoviesLike, wantedPeople (actors or directors), and what they don't want (avoidGenres, avoid, avoidPeople), plus fromYear/toYear and originalLanguage. All of it is already applied: the candidates are ranked by it, and what they avoid is ranked down or left out. Use "tasteProfile" (their wish and positive signals in one line) to judge which candidate fits best, not just genre overlap.
+- "whatWeKnow" also holds what they told you: "wish" (the movie they want, in a sentence), wantedGenres, wantedPeople (actors or directors), and what they don't want (avoidGenres, avoid, avoidPeople). All of it is already applied: the candidates are ranked by it, and what they avoid is ranked down or left out. Use "tasteProfile" (their wish and positive signals in one line) to judge which candidate fits best, not just genre overlap.
 - You don't need to know everything. Once you have a real feel for their taste (a mood, a kind of movie, a movie they love, an actor or director they asked for), suggest ONE movie from "candidates" and say in a sentence why it fits what they told you. Choose the candidate whose description best matches their mood and taste, not simply the first one. A time limit alone is not taste: if that's all you know, ask what they're in the mood for instead.
 - If they react to a suggestion (already seen it, not feeling it, sounds good), respond naturally and then adjust or offer a different candidate. If they say yes, wrap up warmly and briefly.
 - If their reaction is lukewarm or vague ("maybe", "sure", "I guess", "hmm"), do NOT just throw another movie at them. Ask one light question to find out what isn't clicking or what they'd rather have. Don't suggest a different movie two turns in a row unless they rejected the last one, had seen it, or asked for another.

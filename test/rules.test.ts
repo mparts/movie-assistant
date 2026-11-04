@@ -1,5 +1,4 @@
 import { describe, expect, test } from "vitest";
-import { notices } from "../src/config/prompts";
 import { rules } from "../src/core/rules";
 import { freshIS } from "./fixtures";
 import type { InformationState as IS, Move, Movie } from "../src/core/types";
@@ -25,12 +24,6 @@ describe("rules: taste", () => {
     const next = run("integrate_prefer", run("integrate_wish", is)!)!;
     expect(next.wish).toBe("A funny heist.");
     expect([next.genres, next.avoidGenres]).toEqual([["Crime"], ["Comedy"]]);
-  });
-
-  test("time is tonight's setting: a runtime request changes nothing but tells Jake so", () => {
-    const next = run("integrate_constrain", heard([{ type: "constrain", slot: "runtime", op: "lte", value: 90 }]))!;
-    expect(next.constraints).toEqual({ year: {} });
-    expect(next.private.notices).toEqual([notices.timeInSettings]);
   });
 });
 

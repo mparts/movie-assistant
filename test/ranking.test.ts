@@ -9,7 +9,7 @@ const movie = (id: number, extra: Partial<Movie> = {}): Movie => ({ id, title: `
 function pool(entries: [Movie, number[]][]): Pool {
   return { movies: entries.map(([m]) => m), vectors: new Map(entries.map(([m, v]) => [m.id, Float32Array.from(v)])), embeddedNow: 0, ms: 0, source: "catalogue" };
 }
-const ids = (p: Pool, is = freshIS(), q = {}) => rankPool(is, p, { seeds: [], avoid: [], ...q }).map((s) => s.movie.id);
+const ids = (p: Pool, is = freshIS(), q = {}) => rankPool(is, p, { avoid: [], ...q }).map((s) => s.movie.id);
 
 describe("rankPool", () => {
   // 1 is closest to the wish; 2 is a near twin of 1; 3 is somewhat close; 4 is far.

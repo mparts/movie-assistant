@@ -10,8 +10,6 @@ export function evidenceFromMoves(moves: Move[]): string[] {
       case "avoid": return [`avoid:${m.text.trim().toLowerCase()}`];
       case "prefer": return [`prefer:${m.negated ? "not:" : ""}${m.genre.toLowerCase()}`];
       case "person": return [`person:${m.negated ? "not:" : ""}${m.name.toLowerCase()}`];
-      case "like": return [`like:${m.title.trim().toLowerCase()}`];
-      case "constrain": return m.slot === "runtime" ? [] : [`constraint:${m.slot}:${m.op}:${m.value}`];
       default: return [];
     }
   });

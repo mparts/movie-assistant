@@ -100,12 +100,8 @@ export const cases: BenchCase[] = [
     qud: "change",
     state: (is) => ({ ...is, genres: ["Romance"], avoidGenres: ["Comedy"] }),
     utterance: "yes please do that!!",
-    // Either way the avoided genre is released: a retract, or a plain "wants Comedy" (which removes it from the avoided).
-    check: (m) =>
-      expect(
-        of(m, "retract").some((r) => r.slot === "avoidGenres") || of(m, "prefer").some((p) => !p.negated && /comedy/i.test(p.genre)),
-        "the avoided genre was not released"
-      ),
+    // A plain "wants Comedy" releases the avoided genre (it removes it from the avoided).
+    check: (m) => expect(of(m, "prefer").some((p) => !p.negated && /comedy/i.test(p.genre)), "the avoided genre was not released"),
   },
   {
     name: "real-yes-to-an-alternative",
@@ -114,10 +110,10 @@ export const cases: BenchCase[] = [
     qud: "change",
     state: romcom,
     utterance: "yes it works!!",
-    // A yes to Jake's proposal may update the wish or accept; never a negated genre, an avoid, or a liked movie.
+    // A yes to Jake's proposal may update the wish or accept; never a negated genre or an avoid.
     check: (m) =>
       expect(
-        !of(m, "prefer").some((p) => p.negated) && !of(m, "avoid").length && !of(m, "like").length,
+        !of(m, "prefer").some((p) => p.negated) && !of(m, "avoid").length,
         `recorded ${JSON.stringify(m)} from the assistant's words`
       ),
   },
@@ -144,7 +140,7 @@ export const cases: BenchCase[] = [
     state: romcom,
     utterance: "hmm, I'm not sure about that one",
     check: (m) =>
-      expect(!wishes(m, /goofy|future|time travel/i) && !of(m, "like").length && !of(m, "avoid").length && !of(m, "prefer").some((p) => p.negated), `recorded ${JSON.stringify(m)}`),
+      expect(!wishes(m, /goofy|future|time travel/i) && !of(m, "avoid").length && !of(m, "prefer").some((p) => p.negated), `recorded ${JSON.stringify(m)}`),
   },
   {
     name: "no-genre-kept",
@@ -251,15 +247,6 @@ export const cases: BenchCase[] = [
     check: (m) => expect(of(m, "person").some((p) => /nolan/i.test(p.name) && !p.negated), "no wanted Nolan"),
   },
   {
-    name: "runtime-limit",
-    utterance: "I only have an hour and a half tonight",
-    check: (m) =>
-      expect(
-        of(m, "constrain").some((c) => c.slot === "runtime" && c.op === "lte" && typeof c.value === "number" && c.value >= 85 && c.value <= 100),
-        "no runtime <= ~90"
-      ),
-  },
-  {
     name: "negated-genre",
     utterance: "anything but horror, I can't sleep after those",
     check: (m) => expect(of(m, "prefer").some((p) => /horror/i.test(p.genre) && p.negated === true), "no negated Horror"),
@@ -279,49 +266,17 @@ export const cases: BenchCase[] = [
     check: (m) => expect(of(m, "reject").length === 1, "no 'reject' move"),
   },
   {
-    // From a live chat: with a person in the same sentence, the like was dropped and Jake suggested Inception back.
+    // From a live chat: with a person in the same sentence, the liked movie was dropped. A liked movie goes in the wish.
     name: "like-next-to-a-person",
     history: [sys("Sounds like you want something that'll twist your brain a bit. More cerebral puzzles or flashy action?")],
     state: (is) => ({ ...is, wish: "A mind-bending sci-fi movie." }),
     utterance: "something like Inception, maybe even by Nolan",
-    check: (m) => expect(of(m, "like").some((l) => /inception/i.test(l.title)) && of(m, "person").some((p) => /nolan/i.test(p.name)), "the like or the person was lost"),
+    check: (m) => expect(of(m, "wish").length > 0 && of(m, "person").some((p) => /nolan/i.test(p.name)), "the wish or the person was lost"),
   },
   {
     name: "like-a-named-movie",
     utterance: "something along the lines of Parasite",
-    check: (m) => expect(of(m, "like").some((l) => /parasite/i.test(l.title)), "no 'like Parasite'"),
-  },
-  {
-    name: "relative-shorter",
-    history: [sys("Maybe The Godfather? It's a classic.")],
-    suggested: "The Godfather",
-    utterance: "do you have anything a bit shorter than that?",
-    check: (m) =>
-      expect(
-        of(m, "constrain").some((c) => c.slot === "runtime" && c.op === "lte"),
-        "no shorter-runtime request"
-      ),
-  },
-  {
-    name: "decade",
-    utterance: "only movies from the nineties please",
-    check: (m) =>
-      expect(
-        of(m, "constrain").some((c) => c.slot === "year" && typeof c.value === "number" && c.value >= 1988 && c.value <= 2000),
-        "no 1990s year bound"
-      ),
-  },
-  {
-    name: "recent-years",
-    utterance: "something from the last few years",
-    // The model has to know today's date: "last few years" is about 5 years back, not 2010.
-    check: (m) => {
-      const year = new Date().getFullYear();
-      return expect(
-        of(m, "constrain").some((c) => c.slot === "year" && c.op === "gte" && typeof c.value === "number" && c.value >= year - 7 && c.value <= year),
-        "no year bound within about 7 years of today"
-      );
-    },
+    check: (m) => expect(of(m, "wish").length > 0, "no wish for 'like Parasite'"),
   },
   {
     name: "question-gives-nothing",

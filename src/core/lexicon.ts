@@ -50,16 +50,3 @@ export function wordsFor(genres: string[]): string[] {
   for (const [w, v] of Object.entries(GENRE_ALIASES)) if ([v].flat().some((g) => wanted.has(g))) words.add(norm(w));
   return [...words];
 }
-
-const LANGUAGES: Record<string, string> = {
-  english: "en", french: "fr", spanish: "es", german: "de", italian: "it",
-  japanese: "ja", korean: "ko", swedish: "sv", hindi: "hi", chinese: "zh",
-  portuguese: "pt", russian: "ru",
-};
-
-/** "Korean" → "ko"; 2-letter codes pass through; otherwise undefined. */
-export function languageCode(text: string): string | undefined {
-  const t = text.toLowerCase().trim();
-  if (LANGUAGES[t]) return LANGUAGES[t];
-  return /^[a-z]{2}$/.test(t) ? t : undefined;
-}

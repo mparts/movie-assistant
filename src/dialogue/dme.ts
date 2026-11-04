@@ -2,16 +2,13 @@
  * Dialogue Manager Engine (xstate). One turn = Select (say something) → Update (hear + integrate + retrieve).
  *   Select:  respond() → one `say` move, sent to the parent.
  *   Update:  Init → Grounding (wait for SAYS) → Understand (LLM) → Integrate (rule chain)
- *            → Retrieve (look up liked movies → embed new wish/avoid texts → rank tonight's pool) → Done.
+ *            → Retrieve (embed new wish/avoid texts → rank tonight's pool) → Done.
  * Ranking is local and synchronous (core/ranking.ts): no TMDB search during the chat.
  */
 import { AnyTransitionConfig, assign, fromPromise, sendTo, setup } from "xstate";
 import { notices, utterances } from "../config/prompts";
-import type { VectorSource } from "../core/pool";
-import { applyFailure, applyRanking, applySeed, rules, withNotice } from "../core/rules";
-import type {
-  DMEContext, DMEEvent, EmbedQuery, InformationState, LlmClient, Move, Movie, Reply, SaysMovesEvent, TmdbClient,
-} from "../core/types";
+import { applyRanking, rules, withNotice } from "../core/rules";
+import type { DMEContext, DMEEvent, EmbedQuery, InformationState, LlmClient, Move, Reply, SaysMovesEvent } from "../core/types";
 import { flushTimings, isDebug, timed, timedSync } from "../core/util";
 import { respond } from "./respond";
 import { understand } from "./nlu";
@@ -46,17 +43,13 @@ const INTEGRATE_RULES = [
   "integrate_avoid",
   "integrate_prefer",
   "integrate_person",
-  "integrate_constrain",
-  "integrate_retract",
-  "integrate_like",
   "integrate_seen_reject",
   "integrate_recommend",
   "integrate_qud",
 ];
 
-/** Cache keys in `context.vectors`: a query text (wish or avoid), or a liked movie. */
+/** Cache keys in `context.vectors`: a query text (wish or avoid). */
 const textKey = (text: string) => `q:${text}`;
-const movieKey = (id: number) => `movie:${id}`;
 
 /** Wish and avoid texts that have no query vector yet. */
 const unembedded = (c: DMEContext) => [c.is.wish, ...c.is.avoid].filter((t) => t && !c.vectors.has(textKey(t)));
@@ -64,7 +57,6 @@ const unembedded = (c: DMEContext) => [c.is.wish, ...c.is.avoid].filter((t) => t
 /** The query side of the ranking, from the cache (anything missing is simply left out). */
 const queryVectors = (c: DMEContext) => ({
   wish: c.is.wish ? c.vectors.get(textKey(c.is.wish)) : undefined,
-  seeds: c.is.seeds.flatMap((m) => c.vectors.get(movieKey(m.id)) ?? []),
   avoid: c.is.avoid.flatMap((t) => c.vectors.get(textKey(t)) ?? []),
 });
 
@@ -78,7 +70,6 @@ export const dme = setup({
     },
     latestSpeakerIsUsr: ({ context }) => context.latest_speaker === "usr",
     latestSpeakerIsSys: ({ context }) => context.latest_speaker === "sys",
-    seedPending: ({ context }) => context.is.private.agenda.some((a) => a.type === "resolve_seed"),
     needVectors: ({ context }) => unembedded(context).length > 0,
   },
   actions: {
@@ -121,16 +112,6 @@ export const dme = setup({
         return out;
       })
     ),
-    /** "Something like X": TMDB title lookup, then the movie's catalogue copy and vector (embedded if new). */
-    resolveSeed: fromPromise(
-      async ({ input }: { input: { tmdb: TmdbClient; vectorsFor: VectorSource; title: string } }) =>
-        timed("TMDB", async () => {
-          const hit = await input.tmdb.searchMovie(input.title);
-          if (!hit) return null;
-          const { movies, vectors } = await input.vectorsFor([hit]);
-          return { movie: movies[0] ?? hit, vector: vectors.get(hit.id) };
-        })
-    ),
   },
 }).createMachine({
   context: ({ input }) => input,
@@ -168,7 +149,7 @@ export const dme = setup({
     Update: {
       initial: "Init",
       states: {
-        Init: { always: isuTransition("Grounding", "clear_agenda") },
+        Init: { always: isuTransition("Grounding", "clear_notices") },
         Grounding: {
           on: {
             SAYS: [
@@ -219,45 +200,16 @@ export const dme = setup({
           },
         },
         Integrate: { ...ruleChain(INTEGRATE_RULES), onDone: "Retrieve" },
-        /** Only after a user turn. Loop: look up liked movies → embed new texts → rank tonight's pool. */
+        /** Only after a user turn. Loop: embed new texts → rank tonight's pool. */
         Retrieve: {
           initial: "Check",
           states: {
             Check: {
               always: [
                 { guard: "latestSpeakerIsSys", target: "Done" },
-                { guard: "seedPending", target: "ResolveSeed" },
                 { guard: "needVectors", target: "Embed" },
                 { target: "Rank" },
               ],
-            },
-            ResolveSeed: {
-              invoke: {
-                src: "resolveSeed",
-                input: ({ context }) => ({
-                  tmdb: context.tmdb,
-                  vectorsFor: context.vectorsFor,
-                  title: context.is.private.agenda.find((a) => a.type === "resolve_seed")?.title ?? "",
-                }),
-                onDone: {
-                  target: "Check",
-                  actions: assign(({ context, event }) => {
-                    const found = event.output as { movie: Movie; vector?: Float32Array } | null;
-                    const is = applySeed(context.is, found?.movie ?? null);
-                    logIS("resolve_seed", is);
-                    const vectors = new Map(context.vectors);
-                    if (found?.vector) vectors.set(movieKey(found.movie.id), found.vector);
-                    return { is, vectors };
-                  }),
-                },
-                onError: {
-                  target: "Check",
-                  actions: assign(({ context, event }) => {
-                    console.error("[TMDB resolveSeed failed]", event.error);
-                    return { is: applyFailure(context.is) };
-                  }),
-                },
-              },
             },
             Embed: {
               invoke: {

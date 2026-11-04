@@ -5,12 +5,11 @@
  */
 import { settings } from "../config/settings";
 import { notices } from "../config/prompts";
-import { constrain, retract } from "./constraints";
 import { resolveGenres } from "./lexicon";
 import type { Pool } from "./pool";
 import { featuresPerson, rankPool, type QueryVectors } from "./ranking";
 import { evidenceFromMoves } from "./readiness";
-import { Action, InformationState as IS, Move, MoveOf, Movie, NlgMode, Qud, TotalInformationState } from "./types";
+import { InformationState as IS, Move, MoveOf, Movie, NlgMode, Qud, TotalInformationState } from "./types";
 import { addUnique, last, without } from "./util";
 
 type Rule = (context: TotalInformationState) => ((x: void) => IS) | undefined;
@@ -37,7 +36,7 @@ const wordsOf = (s: string) => {
 function findMovie(is: IS, title?: string): Movie | undefined {
   if (!title) return last(is.recommended);
   const t = wordsOf(title);
-  return [...is.recommended, ...is.candidates, ...is.seeds].find((m) => {
+  return [...is.recommended, ...is.candidates].find((m) => {
     const mt = wordsOf(m.title);
     return mt.includes(t) || t.includes(mt);
   });
@@ -49,20 +48,6 @@ const recommendedIds = (moves: Move[]) =>
 const sameName = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
 
 /* ---- results of async work (called from the dialogue manager, not rules) ---- */
-
-/** A resolved (or not found) liked movie: "something like X". It is never suggested back. */
-export function applySeed(is: IS, movie: Movie | null): IS {
-  const i = is.private.agenda.findIndex((a) => a.type === "resolve_seed");
-  if (i < 0) return is;
-  const title = is.private.agenda[i].title;
-  const base: IS = { ...is, private: { ...is.private, agenda: is.private.agenda.filter((_, j) => j !== i) } };
-  if (!movie) return withNotice(base, notices.seedNotFound(title));
-  return base.seeds.some((x) => x.id === movie.id) ? base : { ...base, seeds: [...base.seeds, movie] };
-}
-
-/** A liked movie could not be looked up: drop pending lookups and tell Jake. */
-export const applyFailure = (is: IS): IS =>
-  withNotice({ ...is, private: { ...is.private, agenda: is.private.agenda.filter((a) => a.type !== "resolve_seed") } }, notices.dbUnreachable);
 
 /**
  * Ranks tonight's pool for the current state: the best `candidatesShown` become the candidates. A person the user
@@ -80,8 +65,8 @@ export function applyRanking(is: IS, pool: Pool, q: QueryVectors): IS {
 /* ---- the rules ---- */
 
 export const rules: Record<string, Rule> = {
-  /** Start of each Update cycle: last turn's agenda and notices are spent. */
-  clear_agenda: ({ is }) => () => ({ ...is, private: { agenda: [], notices: [] } }),
+  /** Start of each Update cycle: last turn's notices are spent. */
+  clear_notices: ({ is }) => () => ({ ...is, private: { notices: [] } }),
 
   /** Grounding: record the latest utterance (user text or system say) in the shared state and history. */
   get_latest_move: ({ is, latest_moves, latest_speaker, latest_text }) => () => {
@@ -156,33 +141,6 @@ export const rules: Record<string, Rule> = {
       );
   },
 
-  /** Year and language narrow the pool; time is tonight's setting, so a runtime request only gets a notice. */
-  integrate_constrain: ({ is }) => {
-    const ms = usr(is, "constrain");
-    if (!ms.length) return;
-    return () => {
-      const next = ms.reduce(constrain, is);
-      return ms.some((m) => m.slot === "runtime") ? withNotice(next, notices.timeInSettings) : next;
-    };
-  },
-
-  integrate_retract: ({ is }) => {
-    const ms = usr(is, "retract");
-    return ms.length ? () => ms.reduce((a, m) => retract(a, m.slot), is) : undefined;
-  },
-
-  /** "Something like X": queue a TMDB lookup (done by the dialogue manager as an invoked actor). */
-  integrate_like: ({ is }) => {
-    const ms = usr(is, "like");
-    if (!ms.length) return;
-    return () => ({
-      ...is,
-      private: {
-        ...is.private,
-        agenda: [...is.private.agenda, ...ms.map((m): Action => ({ type: "resolve_seed", title: m.title }))],
-      },
-    });
-  },
 
   integrate_seen_reject: ({ is }) => {
     const ms = [
