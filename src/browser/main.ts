@@ -9,6 +9,13 @@ document.querySelector("#app")!.innerHTML = `
   <header><span class="title">${T.title}</span><span class="tagline">${T.tagline}</span></header>
   <main>
     <section id="form" class="panel"></section>
+    <section id="pool-check" class="panel" hidden>
+      <p class="q" id="pool-message"></p>
+      <div class="row">
+        <button type="button" id="pool-change">${T.pool.change}</button>
+        <button type="button" class="primary" id="pool-go">${T.pool.goAnyway}</button>
+      </div>
+    </section>
     <section id="chat" class="panel" hidden>
       <div id="tonight-summary" class="summary"></div>
       <div class="line jake"><span class="who">${T.chat.jake}</span><p id="jake-said">…</p></div>
@@ -24,6 +31,7 @@ const $ = (id: string) => document.getElementById(id)!;
 function blocked(): string | null {
   const view = speechView();
   if (view === "error" || view === "stopped") return T.waiting.broken;
+  if (dmActor.getSnapshot().matches("FindingMovies")) return T.pool.finding;
   if (!dmActor.getSnapshot().matches("Intake")) return T.waiting.notReady;
   return view === "idle" ? null : T.waiting.busy;
 }
@@ -36,14 +44,29 @@ $("change").addEventListener("click", () => {
   form.open("tonight");
 });
 
+// Too few movies (or none, or an error): back to the Tonight screen with the answers kept, or go anyway.
+$("pool-change").addEventListener("click", () => {
+  dmActor.send({ type: "CHANGE_SETTINGS" });
+  form.open("tonight");
+});
+$("pool-go").addEventListener("click", () => dmActor.send({ type: "GO_ANYWAY" }));
+
 let inChat = false;
 onChange(() => {
   const snap = dmActor.getSnapshot();
   const chatting = snap.matches("Main");
+  const checking = snap.matches("PoolCheck");
   if (chatting !== inChat) {
     inChat = chatting;
-    $("form").hidden = chatting;
     $("chat").hidden = !chatting;
+  }
+  $("form").hidden = chatting || checking;
+  $("pool-check").hidden = !checking;
+  if (checking) {
+    const { pool, poolError } = snap.context;
+    const n = pool?.movies.length ?? 0;
+    $("pool-message").textContent = poolError ? T.pool.failed(poolError) : n ? T.pool.small(n) : T.pool.empty;
+    ($("pool-go") as HTMLButtonElement).hidden = !n;
   }
   form.refresh();
   if (!chatting) return;

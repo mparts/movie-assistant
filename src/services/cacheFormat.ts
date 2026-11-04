@@ -5,6 +5,8 @@
 
 /** Where the dev server serves the cache files to the browser (vite.config.ts). */
 export const cacheRoute = "/cache";
+/** POST tonight's movies, get their vectors back (vite.config.ts). Not under `cacheRoute`, which only knows its two files. */
+export const poolVectorsRoute = "/pool-vectors";
 
 const validVector = (v: unknown): v is number[] =>
   Array.isArray(v) && v.length > 0 && v.every((n) => typeof n === "number" && Number.isFinite(n));

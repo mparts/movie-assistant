@@ -3,7 +3,10 @@ import { defineConfig, loadEnv, type Plugin, type ProxyOptions } from "vite";
 import { authHeaders, services } from "./src/config/services.ts";
 import { settings } from "./src/config/settings.ts";
 import { readJson, writeJsonAtomic } from "./src/services/jsonFile.ts";
-import { cacheRoute, embeddingsFile, embeddingsFrom, runtimesFile, runtimesFrom } from "./src/services/cacheFormat.ts";
+import { cacheRoute, embeddingsFile, embeddingsFrom, poolVectorsRoute, runtimesFile, runtimesFrom } from "./src/services/cacheFormat.ts";
+import { nodeVectorSource } from "./src/services/catalogue.ts";
+import { createTmdb } from "./src/services/tmdb.ts";
+import type { Movie } from "./src/core/types.ts";
 
 /**
  * The browser's view of the on-disk caches in `.cache/` (the same files `npm run chat` uses).
@@ -25,10 +28,53 @@ const caches: Record<string, { path: string; clean(data: unknown): unknown }> = 
   },
 };
 
-function cacheEndpoint(): Plugin {
+/** Only well-formed movies from the browser reach the catalogue on disk. */
+const cleanMovies = (d: unknown): Movie[] =>
+  (Array.isArray(d) ? d : []).filter(
+    (m): m is Movie =>
+      Number.isInteger(m?.id) && typeof m.title === "string" && typeof m.overview === "string" &&
+      Array.isArray(m.genres) && m.genres.every((g: unknown) => typeof g === "string") &&
+      (m.year === undefined || Number.isInteger(m.year)) && typeof m.votes === "number" && typeof m.rating === "number"
+  );
+
+function cacheEndpoint(env: Record<string, string>): Plugin {
   return {
     name: "disk-caches",
     configureServer(server) {
+      /**
+       * Tonight's pool from the browser (POST, JSON movies) → their vectors as Float32 rows, in the order sent, from
+       * the local catalogue; movies missing from it are embedded here (same code as the typed chat). A movie without
+       * a vector gets a row of zeros. Headers: x-dims, x-embedded.
+       */
+      let vectorsFor: ReturnType<typeof nodeVectorSource> | undefined;
+      server.middlewares.use(poolVectorsRoute, (req, res) => {
+        if (req.method !== "POST") return void ((res.statusCode = 405), res.end());
+        const chunks: Buffer[] = [];
+        req.on("data", (c: Buffer) => chunks.push(c));
+        req.on("end", async () => {
+          try {
+            const movies = cleanMovies(JSON.parse(Buffer.concat(chunks).toString("utf8")));
+            vectorsFor ??= nodeVectorSource(
+              createTmdb({ baseUrl: services.tmdb.upstream, headers: authHeaders(services.tmdb, env), ...settings.search })
+            );
+            const { vectors, embedded } = await vectorsFor(movies);
+            const dims = vectors.values().next().value?.length ?? 0;
+            const out = new Float32Array(movies.length * dims);
+            movies.forEach((m, i) => {
+              const v = vectors.get(m.id);
+              if (v) out.set(v, i * dims);
+            });
+            res.setHeader("content-type", "application/octet-stream");
+            res.setHeader("x-dims", String(dims));
+            res.setHeader("x-embedded", String(embedded));
+            res.end(Buffer.from(out.buffer));
+          } catch (e) {
+            console.warn("[pool-vectors]", e);
+            res.statusCode = 500;
+            res.end(String((e as Error).message));
+          }
+        });
+      });
       server.middlewares.use(cacheRoute, (req, res) => {
         const cache = caches[(req.url ?? "").replace(/^\//, "")];
         if (!cache) return void ((res.statusCode = 404), res.end());
@@ -77,5 +123,5 @@ export default defineConfig(({ mode }) => {
       headers,
     };
   }
-  return { server: { proxy }, plugins: [cacheEndpoint()] };
+  return { server: { proxy }, plugins: [cacheEndpoint(env)] };
 });

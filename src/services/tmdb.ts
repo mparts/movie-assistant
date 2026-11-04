@@ -13,6 +13,8 @@ export interface TmdbOptions {
   /** Pages of results a session may draw from, in a per-session random order. */
   pageWindow: number;
   runtimeLookupConcurrency: number;
+  /** Parallel requests when walking every page of a query, or fetching keywords. */
+  walkConcurrency: number;
   /** Wait after a 429, and how many times to retry it before failing. */
   retryDelayMs: number;
   rateLimitRetries: number;
@@ -82,6 +84,13 @@ export function createTmdb(o: TmdbOptions): TmdbClient {
   let runtimesLoaded = false;
   const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+  /** Runs `f` over `xs`, `n` at a time. */
+  async function pooled<T, R>(xs: T[], f: (x: T) => Promise<R>): Promise<R[]> {
+    const out: R[] = [];
+    for (let i = 0; i < xs.length; i += o.walkConcurrency) out.push(...(await Promise.all(xs.slice(i, i + o.walkConcurrency).map(f))));
+    return out;
+  }
+
   async function get(path: string, params: Record<string, string> = {}): Promise<any> {
     const url = `${o.baseUrl}${path}?${new URLSearchParams(params)}`;
     for (let attempt = 0; ; attempt++) {
@@ -90,7 +99,7 @@ export function createTmdb(o: TmdbOptions): TmdbClient {
         await sleep(o.retryDelayMs); // TMDB asks clients to respect 429
         continue;
       }
-      if (!res.ok) throw new Error(`TMDB ${path} HTTP ${res.status}`);
+      if (!res.ok) throw Object.assign(new Error(`TMDB ${path} HTTP ${res.status}`), { status: res.status });
       return res.json();
     }
   }
@@ -169,6 +178,42 @@ export function createTmdb(o: TmdbOptions): TmdbClient {
         .filter((m) => !seen.has(m.id) && !!seen.add(m.id));
       await fillRuntimes(movies);
       return { movies, total: probe.total_results ?? movies.length };
+    },
+    async pool(criteria) {
+      const g = await loadGenres();
+      // A stable order (popularity shifts while we page through it, skipping or repeating movies).
+      const params = { ...buildDiscoverParams(criteria, g.byName, o), sort_by: "primary_release_date.asc" };
+      const found = new Map<number, any>();
+      let pages = 0;
+      const MAX_PAGES = 500; // TMDB returns nothing past page 500 of any query
+      async function walk(from: number, to: number): Promise<void> {
+        const p = { ...params, "primary_release_date.gte": `${from}-01-01`, "primary_release_date.lte": `${to}-12-31` };
+        const first = await get("/discover/movie", { ...p, page: "1" });
+        const total: number = first.total_pages ?? 1;
+        if (total > MAX_PAGES && from < to) {
+          const mid = Math.floor((from + to) / 2);
+          await walk(from, mid);
+          return walk(mid + 1, to);
+        }
+        if (total > MAX_PAGES) console.warn(`[tmdb] ${from}: ${total} pages, only the first ${MAX_PAGES} are reachable`);
+        const rest = await pooled(Array.from({ length: Math.min(total, MAX_PAGES) - 1 }, (_, i) => String(i + 2)), (page) =>
+          get("/discover/movie", { ...p, page })
+        );
+        for (const d of [first, ...rest]) for (const r of d.results ?? []) found.set(r.id, r);
+        pages += 1 + rest.length;
+      }
+      await walk(criteria.year.min ?? 1900, criteria.year.max ?? new Date().getFullYear() + 1);
+      if (isDebug()) console.log(`[tmdb] pool: ${found.size} movies in ${pages} pages`);
+      return [...found.values()].map((r) => toMovie(r, g.byId));
+    },
+    async keywords(id) {
+      try {
+        const d = await get(`/movie/${id}/keywords`);
+        return ((d.keywords ?? []) as any[]).map((k) => String(k.name));
+      } catch (e) {
+        if ((e as { status?: number }).status === 404) return [];
+        throw e;
+      }
     },
     async searchMovie(title) {
       const g = await loadGenres();

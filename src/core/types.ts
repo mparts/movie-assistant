@@ -1,6 +1,7 @@
 import { SpeechStateExternalEvent } from "speechstate";
 import type { Embedder } from "../services/embeddings";
 import type { Intake } from "./intake";
+import type { Pool } from "./pool";
 
 /** A movie as the dialogue sees it. Genres are TMDB genre *names*; only the TMDB client knows ids. */
 export interface Movie {
@@ -117,6 +118,10 @@ export interface SearchCriteria {
 export interface TmdbClient {
   /** `total` is TMDB's count of all matching movies, not just the ones fetched. */
   discover(criteria: SearchCriteria): Promise<{ movies: Movie[]; total: number }>;
+  /** EVERY movie matching the criteria (`page` ignored), walked in release-year ranges under TMDB's 500-page limit. No runtimes. */
+  pool(criteria: SearchCriteria): Promise<Movie[]>;
+  /** A movie's TMDB keywords; none when TMDB has no keyword record. Throws on other errors. */
+  keywords(id: number): Promise<string[]>;
   searchMovie(title: string): Promise<Movie | null>;
 }
 
@@ -147,6 +152,8 @@ export interface TotalInformationState {
 
 export interface DMEContext extends TotalInformationState {
   embedder?: Embedder;
+  /** Tonight's movies, loaded when Phase 1 ended. Not read yet (step 8 part c ranks it). */
+  pool?: Pool;
   parentRef: any;
   tmdb: TmdbClient;
   llm: LlmClient;
@@ -159,6 +166,9 @@ export interface DMContext {
   tmdb: TmdbClient;
   llm: LlmClient;
   is?: InformationState;
+  pool?: Pool;
+  /** Why loading tonight's movies failed, shown on the pool-check screen. */
+  poolError?: string;
   lastUtterance?: string;
   jakeSaid?: string;
 }
@@ -166,6 +176,7 @@ export interface DMContext {
 export type DMEvent =
   | { type: "INTAKE_DONE"; intake: Intake }
   | { type: "CHANGE_SETTINGS" }
+  | { type: "GO_ANYWAY" }
   | SpeechStateExternalEvent
   | NextMovesEvent;
 

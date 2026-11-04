@@ -1,15 +1,19 @@
 /**
  * Top-level machine for the browser: Phase 1 (the settings form) and then the spoken chat, with speechstate
- * around the dialogue manager.  Prepare → Intake (form; INTAKE_DONE) → Main (chat; CHANGE_SETTINGS goes back).
+ * around the dialogue manager.  Prepare → Intake (form; INTAKE_DONE) → FindingMovies (tonight's pool) → Main (chat;
+ * CHANGE_SETTINGS goes back). Too few movies (or none, or an error) → PoolCheck: GO_ANYWAY or CHANGE_SETTINGS.
  */
-import { createActor, setup, assign, sendTo, type AnyMachineSnapshot } from "xstate";
+import { createActor, setup, assign, sendTo, fromPromise, type AnyMachineSnapshot } from "xstate";
 import { speechstate, type Settings } from "speechstate";
 import { azure } from "../config/services";
 import { settings } from "../config/settings";
+import type { Intake } from "../core/intake";
+import { poolCheck, type Pool } from "../core/pool";
 import { initialIS } from "../core/state";
 import type { DMContext, DMEvent, NextMovesEvent } from "../core/types";
 import { createClients } from "../services";
-import { loadBrowserStores } from "../services/browserStores";
+import { fetchPoolVectors, loadBrowserStores } from "../services/browserStores";
+import { loadPool } from "../services/pool";
 import { dme } from "../dialogue/dme";
 import { nlg } from "../dialogue/nlg";
 
@@ -27,7 +31,12 @@ const speechSettings: Settings = {
 };
 
 const dmMachine = setup({
-  actors: { dme },
+  actors: {
+    dme,
+    loadPool: fromPromise(({ input }: { input: { intake: Intake; tmdb: DMContext["tmdb"] } }) =>
+      loadPool(input.intake, input.tmdb, fetchPoolVectors)
+    ),
+  },
   actions: {
     speak: ({ context }) => context.ssRef.send({ type: "SPEAK", value: { utterance: context.jakeSaid ?? "" } }),
     listen: ({ context }) => context.ssRef.send({ type: "LISTEN" }),
@@ -46,9 +55,34 @@ const dmMachine = setup({
     Intake: {
       on: {
         INTAKE_DONE: {
-          target: "Main",
-          actions: assign(({ event }) => ({ is: initialIS(event.intake), jakeSaid: undefined, lastUtterance: undefined })),
+          target: "FindingMovies",
+          actions: assign(({ event }) => ({
+            is: initialIS(event.intake), pool: undefined, poolError: undefined, jakeSaid: undefined, lastUtterance: undefined,
+          })),
         },
+      },
+    },
+    /** Asks TMDB which movies pass tonight's filters, then the dev server for their vectors. */
+    FindingMovies: {
+      invoke: {
+        src: "loadPool",
+        input: ({ context }) => ({ intake: context.is!.intake, tmdb: context.tmdb }),
+        onDone: [
+          {
+            guard: ({ event }) => poolCheck(event.output) === "ok",
+            target: "Main",
+            actions: assign(({ event }) => ({ pool: event.output })),
+          },
+          { target: "PoolCheck", actions: assign(({ event }) => ({ pool: event.output })) },
+        ],
+        onError: { target: "PoolCheck", actions: assign(({ event }) => ({ poolError: (event.error as Error).message })) },
+      },
+    },
+    /** Too few movies, none, or an error: the page says so. Going anyway needs at least one movie. */
+    PoolCheck: {
+      on: {
+        GO_ANYWAY: { guard: ({ context }) => !!context.pool?.movies.length, target: "Main" },
+        CHANGE_SETTINGS: "Intake",
       },
     },
     Main: {
@@ -107,7 +141,8 @@ const dmMachine = setup({
               tmdb: context.tmdb,
               llm: context.llm,
               embedder: context.embedder,
-              is: context.is!, // set by INTAKE_DONE, the only way into Main
+              pool: context.pool as Pool, // set by FindingMovies, the only way into Main
+              is: context.is!, // set by INTAKE_DONE
             }),
           },
         },

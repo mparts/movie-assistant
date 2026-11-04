@@ -39,7 +39,7 @@ const criteria: SearchCriteria = { genres: [], matchAll: false, excludeGenres: [
 const tmdb = (store?: RuntimeStore) =>
   createTmdb({
     baseUrl: "http://x", language: "en-US", sortBy: "popularity.desc", minVotes: 1, pagesPerBatch: 1, pageWindow: 1,
-    runtimeLookupConcurrency: 2, retryDelayMs: 0, rateLimitRetries: 0, store,
+    runtimeLookupConcurrency: 2, walkConcurrency: 2, retryDelayMs: 0, rateLimitRetries: 0, store,
   });
 
 describe("runtime store", () => {

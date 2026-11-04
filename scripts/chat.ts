@@ -19,6 +19,10 @@ import { createClients } from "../src/services";
 import { orderByPreference } from "../src/services/llm";
 import { createFileStore } from "../src/services/embeddingStore";
 import { createRuntimeFileStore } from "../src/services/runtimeStore";
+import { formText as T } from "../src/config/prompts";
+import { poolCheck, type Pool } from "../src/core/pool";
+import { nodeVectorSource } from "../src/services/catalogue";
+import { loadPool } from "../src/services/pool";
 import { loadEnv } from "./env";
 
 const env = loadEnv();
@@ -29,6 +33,7 @@ const clients = createClients("upstream", env, {
   embeddingStore: createFileStore(settings.embeddingCache.path, settings.embeddingCache.maxEntries),
   runtimeStore: createRuntimeFileStore(settings.runtimeCache.path, settings.runtimeCache.maxEntries),
 });
+const vectorsFor = nodeVectorSource(clients.tmdb);
 const enabledBackends = llmBackends.filter((b) => b.enabled !== false);
 const order = (prefer?: string | string[]) => orderByPreference(enabledBackends, prefer).map((b) => `${b.name}:${b.model}`).join(" → ");
 console.log(`NLU backends (in order): ${order(settings.llm.understand.prefer)}`);
@@ -36,6 +41,7 @@ console.log(`NLG backends (in order): ${order(settings.llm.respond.prefer)}`);
 if (!env.DEBUG) console.info = () => {}; // hide per-rule logs unless DEBUG=1
 
 const rl = createInterface({ input: process.stdin, output: process.stdout });
+rl.on("close", () => process.exit(0));
 let turnStart = Date.now();
 
 /** Phase 1 in the terminal: pick a settings file from profiles/ (stands in for the browser form). Asks again on a bad file. */
@@ -56,15 +62,39 @@ async function pickIntake(): Promise<Intake> {
   }
 }
 
-const intake = await pickIntake();
-const { profile, tonight } = intake;
-const cert = certificationFor(tonight.youngestAge);
-console.log(
-  `Profile: ${profile.name ?? "Guest"} · ${profile.country} · ${tonight.company}, youngest ${tonight.youngestAge}${cert ? ` → ${cert}` : ""}` +
-    ` · ${tonight.maxMinutes ? `≤${tonight.maxMinutes} min` : "no time limit"}` +
-    ` · ${profile.platforms.length ? `platforms ${profile.platforms.join("|")}` : "any platform"}` +
-    (tonight.avoidGenres.length ? ` · avoid ${tonight.avoidGenres.join(", ")}` : "")
-);
+/** Phase 1 ends: pick a profile, fetch tonight's movies, and check there are enough (the same rule as the browser form). */
+async function intakeAndPool(): Promise<{ intake: Intake; pool: Pool }> {
+  for (;;) {
+    const intake = await pickIntake();
+    const { profile, tonight } = intake;
+    const cert = certificationFor(tonight.youngestAge);
+    console.log(
+      `Profile: ${profile.name ?? "Guest"} · ${profile.country} · ${tonight.company}, youngest ${tonight.youngestAge}${cert ? ` → ${cert}` : ""}` +
+        ` · ${tonight.maxMinutes ? `≤${tonight.maxMinutes} min` : "no time limit"}` +
+        ` · ${profile.platforms.length ? `platforms ${profile.platforms.join("|")}` : "any platform"}` +
+        (tonight.avoidGenres.length ? ` · avoid ${tonight.avoidGenres.join(", ")}` : "")
+    );
+    console.log(T.pool.finding);
+    let pool: Pool;
+    try {
+      pool = await loadPool(intake, clients.tmdb, vectorsFor);
+    } catch (e) {
+      console.log(T.pool.failed((e as Error).message));
+      continue;
+    }
+    console.log(`Pool: ${pool.movies.length} movies (${pool.embeddedNow} embedded now) in ${(pool.ms / 1000).toFixed(1)}s`);
+    const check = poolCheck(pool);
+    if (check === "ok") return { intake, pool };
+    if (check === "empty") {
+      console.log(`${T.pool.empty} ${T.pool.change}:`);
+      continue;
+    }
+    const answer = (await rl.question(`${T.pool.small(pool.movies.length)} ${T.pool.goAnyway}? (y/n) `)).trim().toLowerCase();
+    if (answer.startsWith("y")) return { intake, pool };
+  }
+}
+
+const { intake, pool } = await intakeAndPool();
 
 const machine = setup({
   types: {} as { events: NextMovesEvent | { type: "USER"; text: string } },
@@ -73,7 +103,7 @@ const machine = setup({
   invoke: {
     src: "dme",
     id: "dme",
-    input: ({ self }): DMEContext => ({ parentRef: self, ...clients, is: initialIS(intake) }),
+    input: ({ self }): DMEContext => ({ parentRef: self, ...clients, pool, is: initialIS(intake) }),
   },
   on: {
     USER: {
@@ -115,4 +145,3 @@ rl.on("line", (line) => {
   turnStart = Date.now();
   actor.send({ type: "USER", text });
 });
-rl.on("close", () => process.exit(0));

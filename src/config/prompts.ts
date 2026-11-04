@@ -160,6 +160,15 @@ export const formText = {
     go: "Let's go",
     pickCompany: "Who's watching?",
   },
+  /** After "Let's go": fetching tonight's movies, and the check on how many there are (same words in the typed chat). */
+  pool: {
+    finding: "Finding tonight's movies…",
+    small: (n: number) => `Only ${n} ${n === 1 ? "movie matches" : "movies match"} tonight's settings.`,
+    empty: "No movies match tonight's settings.",
+    failed: (why: string) => `Couldn't fetch tonight's movies (${why}).`,
+    goAnyway: "Go anyway",
+    change: "Change them",
+  },
   back: "Back",
   /** Why "Let's go" is not available yet. */
   waiting: { notReady: "Warming up the mic…", busy: "Jake is finishing his sentence…", broken: "Speech isn't working (check the Azure key and reload)" },

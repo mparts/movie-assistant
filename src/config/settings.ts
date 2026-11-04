@@ -73,11 +73,11 @@ export const settings = {
     minVotes: 100,
     /** Keywords per movie in its embedded text (TMDB orders them roughly by importance). */
     maxKeywords: 15,
-    /** Parallel TMDB requests (TMDB allows about 50 per second). */
-    concurrency: 20,
     /** Embedding requests between saves (a crash loses at most that much work). */
     saveEvery: 25,
     keywordsPath: ".cache/keywords.json",
+    /** One record per movie (title, year, genres, overview, votes, rating, poster), as TMDB last returned it. */
+    recordsPath: ".cache/catalogue.json",
     /** `<model>` is replaced by the embedding model's name; `.bin` holds the vectors, `.json` the index. */
     vectorsPath: ".cache/vectors-<model>",
   },
@@ -112,9 +112,17 @@ export const settings = {
     /** How many batches to try when the pool runs dry. */
     maxBatches: 5,
     runtimeLookupConcurrency: 10,
+    /** Parallel TMDB requests when walking every page of a query (the pool, the catalogue) or fetching keywords. */
+    walkConcurrency: 20,
     /** TMDB answers 429 when called too fast: wait this long, then retry this many times before giving up. */
     retryDelayMs: 1000,
-    rateLimitRetries: 1,
+    rateLimitRetries: 3,
+  },
+
+  /** Tonight's movies: everything that passes the Phase 1 filters, fetched once when the form is done (no cap). */
+  pool: {
+    /** Fewer than this: the form says so and offers "Go anyway" or "Change them". */
+    minPool: 30,
   },
 
   ranking: {

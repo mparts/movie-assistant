@@ -6,7 +6,8 @@
 import { settings } from "../config/settings";
 import type { EmbeddingStore } from "./embeddings";
 import type { RuntimeStore } from "./tmdb";
-import { cacheRoute, embeddingsFile, embeddingsFrom, runtimesFile, runtimesFrom } from "./cacheFormat";
+import { cacheRoute, embeddingsFile, embeddingsFrom, poolVectorsRoute, runtimesFile, runtimesFrom } from "./cacheFormat";
+import type { VectorSource } from "./pool";
 
 async function get(name: string): Promise<unknown> {
   try {
@@ -42,3 +43,23 @@ export async function loadBrowserStores(): Promise<{ embeddingStore: EmbeddingSt
     },
   };
 }
+
+/** Tonight's vectors from the dev server, which reads the local catalogue and embeds anything missing. */
+export const fetchPoolVectors: VectorSource = async (movies) => {
+  const res = await fetch(poolVectorsRoute, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(movies),
+  });
+  if (!res.ok) throw new Error(`vectors HTTP ${res.status}`);
+  const dims = Number(res.headers.get("x-dims"));
+  const all = new Float32Array(await res.arrayBuffer());
+  if (!dims && !all.length) return { vectors: new Map(), embedded: 0 }; // an empty pool, or nothing with a vector
+  if (all.length !== movies.length * dims) throw new Error("vectors: unexpected size");
+  const vectors = new Map<number, Float32Array>();
+  movies.forEach((m, i) => {
+    const v = all.subarray(i * dims, (i + 1) * dims);
+    if (v.some((x) => x !== 0)) vectors.set(m.id, v); // a row of zeros = no vector
+  });
+  return { vectors, embedded: Number(res.headers.get("x-embedded")) || 0 };
+};
