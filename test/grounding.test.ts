@@ -2,7 +2,7 @@ import { describe, expect, test, vi } from "vitest";
 import { rules } from "../src/core/rules";
 import { freshIS } from "./fixtures";
 import type { InformationState as IS, LlmClient, Move, Movie } from "../src/core/types";
-import { ground, isAffirmation } from "../src/dialogue/grounding";
+import { ground, isAffirmation, repairMoves } from "../src/dialogue/grounding";
 import { understand } from "../src/dialogue/nlu";
 import { respond } from "../src/dialogue/respond";
 
@@ -141,5 +141,28 @@ describe("D: retract slots named as the NLU sees them", () => {
   ])("%s → %s", async (given, real) => {
     const out = await understand(llmSays({ moves: [{ type: "retract", slot: given }] }), "drop that", freshIS());
     expect(out).toEqual([{ type: "retract", slot: real }]);
+  });
+});
+
+describe("a negation in the wish", () => {
+  // Found by replaying lost wishes: any negation dropped the whole wish, and a mid-sentence one was cut in the wrong place.
+  const old = "A gentle animated adventure.";
+  const repaired = (text: string) => ground(repairMoves([{ type: "wish", text }], old, []), "x", undefined, null, old);
+  test.each([
+    "A non-stop action adventure.",
+    "A funny movie about a kid who can't stop laughing.",
+    "A sweet story about a robot that doesn't fit in, with lots of humor.",
+    "A movie about animals that can't talk.",
+    "A heartwarming story about a dog who never gives up.",
+  ])("part of the story, kept as it is: %s", (text) => {
+    expect(repaired(text)).toEqual([{ type: "wish", text }]);
+  });
+
+  test.each([
+    ["A magical adventure with no princesses and lots of laughs.", "A magical adventure with lots of laughs.", "princesses"],
+    ["A funny animated adventure, not too scary.", "A funny animated adventure.", "scary"],
+    ["A story of friendship, not romance.", "A story of friendship.", "romance"],
+  ])("a refusal goes to avoid: %s", (text, wish, avoid) => {
+    expect(repaired(text)).toEqual([{ type: "wish", text: wish }, { type: "avoid", text: avoid }]);
   });
 });

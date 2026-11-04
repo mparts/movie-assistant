@@ -47,9 +47,7 @@ describe("rules: suggestion streak", () => {
 });
 
 describe("rules: naming a movie", () => {
-  // Found while writing these tests: findMovie matches titles by substring in both directions, so a short
-  // title inside a longer one is matched by mistake. Remove `.fails` once findMovie is fixed.
-  test.fails("rejecting \"Hereditary\" must not reject the movie \"Her\"", () => {
+  test("rejecting \"Hereditary\" must not reject the movie \"Her\"", () => {
     const is = heard([{ type: "reject", title: "Hereditary" }], (s) => {
       s.candidates = [movie(10, "Her")];
     });

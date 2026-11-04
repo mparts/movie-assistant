@@ -86,24 +86,51 @@ function negationSupported(m: Extract<Move, { type: "prefer" }>, utterance: stri
   return positions(said, [...terms]).some((p) => negatedAt(said, p));
 }
 
-/** "without office settings", "a non-horror movie": what they don't want belongs in avoid, not the wish. */
-const NEGATED_WISH = /\b(no|not|without|never|non)\b|n't\b/i;
-/** A wish that ENDS in a negated part: "A scary ghost story, but not gory." → wish + the thing to avoid. */
-const NEGATED_TAIL = /[,;]?\s*(?:\b(?:but|and)\s+)?(?:\bnot(?:\s+too)?|\bno|\bwithout|\bnever)\b\s+(.+?)\s*[.!]?\s*$/i;
+/**
+ * A refusal inside a wish ("no princesses", "not too scary", "without office settings", "isn't gory"), up to the
+ * next comma, full stop, "and" or "but". A "not" after "does", "can" and similar is part of the story, and so are
+ * "never", "can't" and "non-stop".
+ */
+const REFUSAL =
+  /(?<glue>\s*,?\s*\b(?:but|and|that|which|with)\s+|\s*,\s*|\s+|^)(?<!\b(?:do|does|did|can|could|will|would|should|must)\s+)(?<cue>\b(?:no|without|nothing|not|isn['’]t|aren['’]t|is\s+not|are\s+not)\b(?:\s+too\b)?)\s+(?<what>[^,;.!?]+?)(?<end>\s*[,;]\s*|\s+(?:and|but)\s+|\s*[.!?]*\s*$)/i;
 
 /**
- * Repairs the model's two common slips on the way to the rules: a negated tail in the wish is split off into an avoid,
+ * Splits the refusals out of a wish, because an embedding ranks the refused thing first. "A magical adventure with
+ * no princesses and lots of laughs." gives the wish "A magical adventure with lots of laughs." and the avoid
+ * "princesses". The wish is empty when nothing else is left.
+ */
+export function splitRefusals(text: string): { wish: string; avoid: string[] } {
+  const avoid: string[] = [];
+  let rest = text;
+  for (let m = rest.match(REFUSAL); m?.groups; m = rest.match(REFUSAL)) {
+    const { glue, what, end } = m.groups;
+    avoid.push(what.trim());
+    const atEnd = /^[\s.!?]*$/.test(end);
+    // In the middle, "with" and a comma still join what comes before to what comes after.
+    const keep = atEnd ? "" : /\bwith\b/i.test(glue) ? " with " : glue.includes(",") ? ", " : " ";
+    rest = rest.slice(0, m.index) + keep + rest.slice(m.index! + m[0].length);
+  }
+  const wish = rest.replace(/\s+/g, " ").replace(/^[\s,;]+|[\s,;]+$/g, "");
+  if (!/[a-z]/i.test(wish)) return { wish: "", avoid };
+  const capital = wish[0].toUpperCase() + wish.slice(1);
+  return { wish: /[.!?]$/.test(capital) ? capital : `${capital}.`, avoid };
+}
+
+/**
+ * Repairs the model's two common slips on the way to the rules: refusals in the wish are split off into avoids,
  * and a relative tone request (an `adjust` move "goofier", which the prompt no longer offers but small models still
  * produce, and which `clean` drops) is folded into the wish. Anything else is left as it is.
  */
 export function repairMoves(moves: Move[], wish: string, raw: unknown[]): Move[] {
   const out: Move[] = [];
   for (const m of moves) {
-    const tail = m.type === "wish" ? m.text.match(NEGATED_TAIL) : null;
-    const head = m.type === "wish" && tail ? m.text.slice(0, tail.index).trim() : "";
-    if (tail && head && !NEGATED_WISH.test(head)) {
-      out.push({ type: "wish", text: /[.!?]$/.test(head) ? head : `${head}.` }, { type: "avoid", text: tail[1] });
-    } else out.push(m);
+    if (m.type !== "wish") {
+      out.push(m);
+      continue;
+    }
+    const split = splitRefusals(m.text);
+    if (split.wish) out.push({ type: "wish", text: split.wish });
+    out.push(...split.avoid.map((text): Move => ({ type: "avoid", text })));
   }
   for (const r of raw as { type?: unknown; dimension?: unknown; direction?: unknown }[]) {
     const dir = typeof r?.direction === "string" ? r.direction.trim() : "";
@@ -138,8 +165,6 @@ export function ground(moves: Move[], utterance: string, lastSystem: string | un
         return titleSaid(m.name, utterance);
       case "wish": {
         if (words(m.text).every((w) => HEDGE.has(w))) return false; // "not sure yet" is not a taste
-        // A negation in the wish ranks the very thing they refused first (step 5 spike): keep the previous wish.
-        if (NEGATED_WISH.test(m.text)) return false;
         // Only the words the rewrite adds to the old wish count. A bare "yes" to Jake's proposal takes it.
         const fresh = content(m.text).filter((x) => !mentions(wish, x));
         return isAffirmation(utterance) || !copied(fresh, utterance, lastSystem);

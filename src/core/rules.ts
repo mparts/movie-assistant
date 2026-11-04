@@ -28,11 +28,17 @@ export const withNotice = (is: IS, notice: string): IS =>
   is.private.notices.includes(notice) ? is : { ...is, private: { ...is.private, notices: [...is.private.notices, notice] } };
 
 /** A title the user names ("that one" = the movie in focus), looked up among what we know. */
+/** Lowercased, punctuation as single spaces, padded, so a match is always on whole words. */
+const wordsOf = (s: string) => {
+  const norm = s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+  return ` ${norm || s.toLowerCase()} `;
+};
+
 function findMovie(is: IS, title?: string): Movie | undefined {
   if (!title) return last(is.recommended);
-  const t = title.toLowerCase();
+  const t = wordsOf(title);
   return [...is.recommended, ...is.candidates, ...is.seeds].find((m) => {
-    const mt = m.title.toLowerCase();
+    const mt = wordsOf(m.title);
     return mt.includes(t) || t.includes(mt);
   });
 }
