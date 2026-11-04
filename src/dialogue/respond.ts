@@ -1,8 +1,8 @@
 import { respondModes, respondSystem, utterances } from "../config/prompts";
 import { settings } from "../config/settings";
-import { hasTaste, stateSummary, tasteProfile } from "../core/state";
+import { hasTaste, stateSummary } from "../core/state";
 import type { InformationState, LlmClient, Movie, NlgMode as Mode, Reply } from "../core/types";
-import { namesTitle } from "../core/util";
+import { last, namesTitle } from "../core/util";
 
 const { dialogue: d } = settings;
 
@@ -42,6 +42,8 @@ export async function respond(llm: LlmClient, is: InformationState): Promise<Rep
   const { mode, accepted } = replyMode(is);
   // Candidates are withheld unless we're in recommend mode: the LLM cannot pick one early.
   const pool = mode === "recommend" ? is.candidates.slice(0, d.candidatesShown) : [];
+  // Suggested movies leave "candidates", so the one a question or the wrap-up is about gets its facts here.
+  const focus = accepted ?? last(is.recommended);
 
   const messages = [
     { role: "system" as const, content: `${respondSystem}\n${respondModes[mode]}` },
@@ -50,13 +52,10 @@ export async function respond(llm: LlmClient, is: InformationState): Promise<Rep
       content: JSON.stringify({
         conversation: is.history.slice(-d.historyForRespond),
         whatWeKnow: stateSummary(is),
-        tasteProfile: tasteProfile(is),
         alreadySuggested: is.recommended.map((m) => m.title),
-        // suggested movies leave "candidates", so the LLM needs their facts here to answer follow-up questions
-        suggestedDetails: is.recommended.slice(-d.suggestedDetails).map((m) => facts(m, d.descriptionChars.suggested)),
+        suggestedMovie: focus && facts(focus, d.descriptionChars.suggested),
         acceptedMovie: accepted?.title,
-        candidatePool: mode !== "recommend" ? "exploring" : pool.length ? "ok" : "empty",
-        candidates: pool.map((m) => ({ id: m.id, ...facts(m, d.descriptionChars.candidate) })),
+        ...(mode === "recommend" && { candidates: pool.map((m) => ({ id: m.id, ...facts(m, d.descriptionChars.candidate) })) }),
         notices: is.private.notices,
       }),
     },

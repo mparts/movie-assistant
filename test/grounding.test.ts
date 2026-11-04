@@ -57,7 +57,7 @@ describe("A: a bare yes after a suggestion is an accept, without the LLM", () =>
     expect(messages[0].content).toContain("WRAP-UP MODE");
     const sent = JSON.parse(messages[1].content);
     expect(sent.acceptedMovie).toBe("About Time");
-    expect(sent.candidates).toEqual([]);
+    expect(sent.candidates).toBeUndefined();
   });
 
 

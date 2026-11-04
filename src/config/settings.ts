@@ -7,15 +7,13 @@ export const settings = {
     /** What a silent turn looks like in the history. */
     silenceMarker: "(silence)",
     /** How many candidates the LLM sees (best-ranked first). */
-    candidatesShown: 8,
+    candidatesShown: 5,
     /** Tries when the LLM breaks a rule (unknown movie id, naming a movie too early). */
     respondAttempts: 2,
     maxSayChars: 700,
     /** Turns of conversation shown to the LLM. */
     historyForNlu: 6,
     historyForRespond: 12,
-    /** How many suggested movies keep their full facts in the prompt (for "what is it about?"). */
-    suggestedDetails: 5,
     /** Description length per movie in the prompt. */
     descriptionChars: { candidate: 220, suggested: 400 },
     /** Top-billed actors Elisa is told about per movie (the catalogue keeps `search.castShown`). */
@@ -45,8 +43,11 @@ export const settings = {
      * local model (not in this list) stays last, as a last resort.
      */
     understand: { temperature: 0, maxTokens: 800, purpose: "NLU", prefer: ["ollama", "groq"] as string[] | undefined },
-    /** Elisa's replies: no preference, so the configured order applies (Groq first, then the others as fallbacks). */
-    respond: { temperature: 0.7, maxTokens: 1200, purpose: "NLG", prefer: undefined as string[] | undefined },
+    /**
+     * Elisa's replies: no preference, so the configured order applies (Groq first, then the others as fallbacks).
+     * Groq counts `maxTokens` against its tokens per minute. A reply with gpt-oss's reasoning takes about 100.
+     */
+    respond: { temperature: 0.7, maxTokens: 600, purpose: "NLG", prefer: undefined as string[] | undefined },
   },
 
   /**
