@@ -178,6 +178,8 @@ export interface DMContext {
   /** The recogniser's confidence in `lastUtterance`. */
   confidence?: number;
   elisaSaid?: string;
+  /** Elisa has said her wrap-up: the conversation is over and she stops listening. */
+  ended?: boolean;
 }
 
 export type DMEvent =

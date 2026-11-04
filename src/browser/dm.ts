@@ -10,7 +10,7 @@ import { settings } from "../config/settings";
 import type { Intake } from "../core/intake";
 import { poolCheck, type Pool } from "../core/pool";
 import { initialIS } from "../core/state";
-import { spokenText } from "../core/util";
+import { isWrapup, spokenText } from "../core/util";
 import type { DMContext, DMEContext, DMEvent } from "../core/types";
 import { createClients } from "../services";
 import { fetchPool } from "../services/poolClient";
@@ -56,7 +56,7 @@ const dmMachine = setup({
         INTAKE_DONE: {
           target: "FindingMovies",
           actions: assign(({ event }) => ({
-            is: initialIS(event.intake), pool: undefined, poolError: undefined, elisaSaid: undefined, lastUtterance: undefined,
+            is: initialIS(event.intake), pool: undefined, poolError: undefined, elisaSaid: undefined, lastUtterance: undefined, ended: false,
           })),
         },
       },
@@ -97,6 +97,7 @@ const dmMachine = setup({
             Idle: {
               on: {
                 SPEAK_COMPLETE: {
+                  guard: ({ context }) => !context.ended,
                   target: "Recognising",
                   actions: [assign({ lastUtterance: () => "", confidence: () => undefined }), "listen"],
                 },
@@ -131,7 +132,7 @@ const dmMachine = setup({
                   target: "Speaking",
                   actions: [
                     ({ context }) => turnLog.turn(dmeContext()!, context.confidence),
-                    assign(({ event }) => ({ elisaSaid: spokenText(event.value) })),
+                    assign(({ event }) => ({ elisaSaid: spokenText(event.value), ended: isWrapup(event.value) })),
                     sendTo("dmeID", ({ event }) => ({ type: "SAYS", value: { speaker: "sys", moves: event.value } })),
                   ],
                 },

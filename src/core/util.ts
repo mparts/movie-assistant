@@ -5,6 +5,9 @@ export const last = <T>(xs: T[]): T | undefined => xs[xs.length - 1];
 /** What Elisa says: the text of her `say` moves. */
 export const spokenText = (moves: Move[]) => moves.flatMap((m) => (m.type === "say" ? [m.text] : [])).join(" ");
 
+/** Is one of these moves Elisa's wrap-up, the last thing she says? */
+export const isWrapup = (moves: Move[]) => moves.some((m) => m.type === "say" && m.mode === "wrapup");
+
 const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 /** Does `text` name this movie title? Whole words, any case: "Up" is not in "supper". */
 export const namesTitle = (text: string, title: string) => new RegExp(`(^|\\W)${escape(title)}(\\W|$)`, "i").test(text);

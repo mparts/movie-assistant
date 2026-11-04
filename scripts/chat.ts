@@ -13,7 +13,7 @@ import { createActor, sendTo, setup } from "xstate";
 import { llmBackends } from "../src/config/services";
 import { settings } from "../src/config/settings";
 import { initialIS } from "../src/core/state";
-import { spokenText } from "../src/core/util";
+import { isWrapup, spokenText } from "../src/core/util";
 import type { DMEContext, NextMovesEvent } from "../src/core/types";
 import { createTurnLog, describePool, describeTonight, logState } from "../src/dialogue/debugView";
 import { dme } from "../src/dialogue/dme";
@@ -104,6 +104,7 @@ const machine = setup({
         ({ event }) => {
           turnLog.turn(dmeContext());
           console.log(`\nassistant> ${spokenText(event.value)}   (${Date.now() - turnStart}ms)\n`);
+          if (isWrapup(event.value)) process.exit(0);
           rl.prompt();
         },
         sendTo("dme", ({ event }) => ({ type: "SAYS", value: { speaker: "sys", moves: event.value } })),

@@ -7,7 +7,7 @@ export const settings = {
     /** What a silent turn looks like in the history. */
     silenceMarker: "(silence)",
     /** How many candidates the LLM sees (best-ranked first). */
-    candidatesShown: 5,
+    candidatesShown: 10,
     /** Tries when the LLM breaks a rule (unknown movie id, naming a movie too early). */
     respondAttempts: 2,
     maxSayChars: 700,
