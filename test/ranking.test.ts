@@ -7,7 +7,7 @@ import { freshIS } from "./fixtures";
 /** A tiny pool: each movie's vector is a direction in 3-D, so similarity is easy to read. */
 const movie = (id: number, extra: Partial<Movie> = {}): Movie => ({ id, title: `M${id}`, genres: [], rating: 7, votes: 100, overview: "x", ...extra });
 function pool(entries: [Movie, number[]][]): Pool {
-  return { movies: entries.map(([m]) => m), vectors: new Map(entries.map(([m, v]) => [m.id, Float32Array.from(v)])), embeddedNow: 0, ms: 0 };
+  return { movies: entries.map(([m]) => m), vectors: new Map(entries.map(([m, v]) => [m.id, Float32Array.from(v)])), embeddedNow: 0, ms: 0, source: "catalogue" };
 }
 const ids = (p: Pool, is = freshIS(), q = {}) => rankPool(is, p, { seeds: [], avoid: [], ...q }).map((s) => s.movie.id);
 

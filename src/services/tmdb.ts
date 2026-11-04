@@ -124,7 +124,9 @@ export function createTmdb(o: TmdbOptions): TmdbClient {
       return [...found.values()].map((r) => toMovie(r, g.byId));
     },
     async details(id) {
-      const d = await get(`/movie/${id}`, { language: o.language, append_to_response: "credits,keywords" });
+      const d = await get(`/movie/${id}`, { language: o.language, append_to_response: "credits,keywords,release_dates" });
+      const us = ((d.release_dates?.results ?? []) as any[]).find((r) => r.iso_3166_1 === "US");
+      const certification = ((us?.release_dates ?? []) as any[]).map((r) => String(r.certification ?? "").trim()).find(Boolean) ?? "";
       const str = (x: unknown) => (typeof x === "string" && x.trim() ? x.trim() : undefined);
       return {
         runtime: typeof d.runtime === "number" && d.runtime > 0 ? d.runtime : undefined,
@@ -132,6 +134,7 @@ export function createTmdb(o: TmdbOptions): TmdbClient {
         cast: ((d.credits?.cast ?? []) as any[]).slice(0, o.castShown).map((c) => String(c.name)),
         collection: str(d.belongs_to_collection?.name),
         tagline: str(d.tagline),
+        certification,
         keywords: ((d.keywords?.keywords ?? []) as any[]).map((k) => String(k.name)),
       };
     },

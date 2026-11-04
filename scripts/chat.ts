@@ -19,8 +19,7 @@ import { createClients } from "../src/services";
 import { orderByPreference } from "../src/services/llm";
 import { formText as T } from "../src/config/prompts";
 import { poolCheck, type Pool } from "../src/core/pool";
-import { nodeVectorSource } from "../src/services/catalogue";
-import { loadPool } from "../src/services/pool";
+import { createNodePool } from "../src/services/catalogue";
 import { loadEnv } from "./env";
 
 const env = loadEnv();
@@ -29,7 +28,7 @@ const clients = createClients("upstream", env, {
   onLlmAnswer: (a) =>
     console.log(`  [${a.purpose ?? "LLM"}] ${a.backend} (${a.model}) ${Math.round(a.ms)}ms${a.failed.length ? `, after ${a.failed.join(", ")} failed` : ""}`),
 });
-const vectorsFor = nodeVectorSource(clients.tmdb);
+const { pool: loadPool, vectorsFor } = createNodePool(clients.tmdb, console.log);
 const enabledBackends = llmBackends.filter((b) => b.enabled !== false);
 const order = (prefer?: string | string[]) => orderByPreference(enabledBackends, prefer).map((b) => `${b.name}:${b.model}`).join(" → ");
 console.log(`NLU backends (in order): ${order(settings.llm.understand.prefer)}`);
@@ -73,12 +72,12 @@ async function intakeAndPool(): Promise<{ intake: Intake; pool: Pool }> {
     console.log(T.pool.finding);
     let pool: Pool;
     try {
-      pool = await loadPool(intake, clients.tmdb, vectorsFor);
+      pool = await loadPool(intake);
     } catch (e) {
       console.log(T.pool.failed((e as Error).message));
       continue;
     }
-    console.log(`Pool: ${pool.movies.length} movies (${pool.embeddedNow} embedded now) in ${(pool.ms / 1000).toFixed(1)}s`);
+    console.log(`Pool: ${pool.movies.length} movies from ${pool.source === "catalogue" ? "the local catalogue" : "TMDB"} (${pool.embeddedNow} embedded now) in ${(pool.ms / 1000).toFixed(1)}s`);
     const check = poolCheck(pool);
     if (check === "ok") return { intake, pool };
     if (check === "empty") {

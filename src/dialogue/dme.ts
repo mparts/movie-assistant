@@ -8,7 +8,7 @@
 import { AnyTransitionConfig, assign, fromPromise, sendTo, setup } from "xstate";
 import { notices, utterances } from "../config/prompts";
 import type { VectorSource } from "../core/pool";
-import { applyFailure, applyRanking, applySeed, rules } from "../core/rules";
+import { applyFailure, applyRanking, applySeed, rules, withNotice } from "../core/rules";
 import type {
   DMEContext, DMEEvent, EmbedQuery, InformationState, LlmClient, Move, Movie, Reply, SaysMovesEvent, TmdbClient,
 } from "../core/types";
@@ -40,11 +40,6 @@ function ruleChain(names: string[]) {
   return { initial: names[0], states } as any;
 }
 
-/** Add a notice for the LLM to mention (what happened behind the scenes this turn). */
-const withNotice = (is: InformationState, text: string): InformationState => ({
-  ...is,
-  private: { ...is.private, notices: [...is.private.notices, text] },
-});
 
 const INTEGRATE_RULES = [
   "integrate_wish",

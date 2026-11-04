@@ -1,6 +1,22 @@
 import { describe, expect, test, vi } from "vitest";
 import { createLlm, orderByPreference } from "../src/services/llm";
 import { buildDiscoverParams } from "../src/services/tmdb";
+import { fitsRating } from "../src/services/catalogue";
+import type { Movie, SearchCriteria } from "../src/core/types";
+
+describe("age limit", () => {
+  test("unrated (NR) movies only fit when there is no age limit", () => {
+    const c: SearchCriteria = { excludeGenres: [], runtime: {}, year: {} };
+    const movie = (certification?: string) => ({ certification }) as Movie;
+    const underPG = (cert?: string) => fitsRating(movie(cert), { ...c, certificationLte: "PG" });
+    expect(underPG("NR")).toBe(false);
+    expect(underPG("")).toBe(false);
+    expect(underPG(undefined)).toBe(false);
+    expect(underPG("PG")).toBe(true);
+    expect(underPG("R")).toBe(false);
+    expect(fitsRating(movie("NR"), c)).toBe(true);
+  });
+});
 
 describe("tmdb params", () => {
   test("Phase 1 maps to the discover query; certification and platforms only when set", () => {

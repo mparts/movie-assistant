@@ -12,8 +12,7 @@ import { poolCheck, type Pool } from "../core/pool";
 import { initialIS } from "../core/state";
 import type { DMContext, DMEvent, NextMovesEvent } from "../core/types";
 import { createClients } from "../services";
-import { fetchPoolVectors } from "../services/poolVectorsClient";
-import { loadPool } from "../services/pool";
+import { fetchPool, fetchPoolVectors } from "../services/poolVectorsClient";
 import { dme } from "../dialogue/dme";
 import { nlg } from "../dialogue/nlg";
 
@@ -32,9 +31,8 @@ const speechSettings: Settings = {
 const dmMachine = setup({
   actors: {
     dme,
-    loadPool: fromPromise(({ input }: { input: { intake: Intake; tmdb: DMContext["tmdb"] } }) =>
-      loadPool(input.intake, input.tmdb, fetchPoolVectors)
-    ),
+    /** The dev server loads it (local catalogue or TMDB) with the same code as the typed chat. */
+    loadPool: fromPromise(({ input }: { input: { intake: Intake } }): Promise<Pool> => fetchPool(input.intake)),
   },
   actions: {
     speak: ({ context }) => context.ssRef.send({ type: "SPEAK", value: { utterance: context.jakeSaid ?? "" } }),
@@ -61,11 +59,11 @@ const dmMachine = setup({
         },
       },
     },
-    /** Asks TMDB which movies pass tonight's filters, then the dev server for their vectors. */
+    /** Tonight's pool: the movies that pass the settings, with their vectors. */
     FindingMovies: {
       invoke: {
         src: "loadPool",
-        input: ({ context }) => ({ intake: context.is!.intake, tmdb: context.tmdb }),
+        input: ({ context }) => ({ intake: context.is!.intake }),
         onDone: [
           {
             guard: ({ event }) => poolCheck(event.output) === "ok",

@@ -10,6 +10,8 @@ export interface Pool {
   /** Movies that were not in the catalogue yet and were embedded while loading. */
   embeddedNow: number;
   ms: number;
+  /** Where the list of movies came from: the local copy, or a walk over TMDB. */
+  source: "catalogue" | "tmdb";
 }
 
 /**
@@ -17,6 +19,9 @@ export interface Pool {
  * browser: the dev server. Movies without a vector are left out.
  */
 export type VectorSource = (movies: Movie[]) => Promise<{ movies: Movie[]; vectors: Map<number, Float32Array>; embedded: number }>;
+
+/** Loads tonight's pool when Phase 1 ends. Node: the catalogue (or TMDB); browser: the dev server, which does the same. */
+export type PoolLoader = (intake: import("./intake").Intake) => Promise<Pool>;
 
 /** Enough movies to talk about, too few (the user may go anyway), or none at all. */
 export type PoolCheck = "ok" | "small" | "empty";

@@ -1,32 +1,51 @@
 /**
  * The local copy of the movie catalogue (Node only): a record, keywords and a vector per movie, in `.cache/`.
  * `ensureVectors` is the one place that turns movies into vectors: from the copy when it has them, otherwise by
- * fetching keywords and embedding on the spot (then saved). Used by `embed-catalogue`, the typed chat and the
- * dev server (for the browser).
+ * fetching details and embedding on the spot (then saved). `createNodePool` loads tonight's pool, from the copy when
+ * it can (see there). Used by `embed-catalogue`, the typed chat and the dev server (for the browser).
  */
 import { embeddings as embCfg, services } from "../config/services";
 import { settings } from "../config/settings";
-import type { Movie, TmdbClient } from "../core/types";
+import type { Intake } from "../core/intake";
+import type { Pool, VectorSource } from "../core/pool";
+import { poolCriteria } from "../core/state";
+import type { Movie, SearchCriteria, TmdbClient } from "../core/types";
 import { embedTexts, hash53, movieText } from "./embeddings";
 import { readJson, writeJsonAtomic } from "./jsonFile";
 import { loadVectorStore, vectorStorePath, type VectorStore } from "./vectorStore";
 
 const cat = settings.catalogue;
 
+/** What `embed-catalogue` walked, and when: every TMDB movie with at least `minVotes` votes and `minMinutes` minutes. */
+export interface Coverage {
+  minVotes: number;
+  minMinutes: number;
+  /** ISO date of the walk. Movies released since its year are checked against TMDB at every pool. */
+  updated: string;
+}
+
 export interface Catalogue {
   records: Map<number, Movie>;
   keywords: Record<string, string[]>;
   store: VectorStore;
+  /** Unknown (an older file): the copy is then never used as a pool on its own. */
+  coverage?: Coverage;
 }
 
 export function openCatalogue(): Catalogue {
-  const raw = (readJson(cat.recordsPath) as { entries?: unknown } | undefined)?.entries;
+  const file = readJson(cat.recordsPath) as { entries?: unknown; coverage?: Coverage } | undefined;
+  const raw = file?.entries;
   const records = new Map<number, Movie>(
     Array.isArray(raw) ? raw.filter((m): m is Movie => Number.isInteger(m?.id) && typeof m?.title === "string").map((m) => [m.id, m]) : []
   );
   const keywords = (readJson(cat.keywordsPath) ?? {}) as Record<string, string[]>;
-  return { records, keywords, store: loadVectorStore(vectorStorePath(cat.vectorsPath, embCfg.model), embCfg.model) };
+  const cov = file?.coverage;
+  const coverage = Number.isFinite(cov?.minVotes) && Number.isFinite(cov?.minMinutes) && typeof cov?.updated === "string" ? cov : undefined;
+  return { records, keywords, coverage, store: loadVectorStore(vectorStorePath(cat.vectorsPath, embCfg.model), embCfg.model) };
 }
+
+export const saveRecords = (c: Catalogue) =>
+  writeJsonAtomic(cat.recordsPath, { coverage: c.coverage, entries: [...c.records.values()] }, "catalogue");
 
 export interface EnsureOptions {
   /** Embedding progress (the catalogue script prints it). */
@@ -34,8 +53,8 @@ export interface EnsureOptions {
   onDetails?: (done: number, total: number) => void;
 }
 
-/** A record without details yet: `cast` is set (maybe empty) once a details call succeeded. */
-const needsDetails = (m: Movie | undefined) => !m || !Array.isArray(m.cast);
+/** A record without details yet: `cast` and `certification` are set (maybe empty) once a details call succeeded. */
+const needsDetails = (m: Movie | undefined) => !m || !Array.isArray(m.cast) || m.certification === undefined;
 
 /**
  * The catalogue's copy of every movie that has an overview, with its vector (movies without one are left out).
@@ -58,7 +77,7 @@ export async function ensureVectors(
     c.records.set(m.id, { ...c.records.get(m.id), ...fresh } as Movie);
   }
 
-  // Details (runtime, credits, keywords) for movies that have none yet. A failed request is retried next time:
+  // Details (runtime, credits, US rating, keywords) for movies that have none yet. A failed request is retried next time:
   // the movie is embedded without keywords now, and again once they arrive, because its text changes.
   const todoDetails = withText.filter((m) => needsDetails(c.records.get(m.id)));
   const n = settings.search.walkConcurrency;
@@ -79,7 +98,7 @@ export async function ensureVectors(
       );
     }
     writeJsonAtomic(cat.keywordsPath, c.keywords, "keyword cache");
-    writeJsonAtomic(cat.recordsPath, { entries: [...c.records.values()] }, "catalogue");
+    saveRecords(c);
     opts.onDetails?.(Math.min(i + 1000, todoDetails.length), todoDetails.length);
   }
 
@@ -102,7 +121,7 @@ export async function ensureVectors(
     }
   }
 
-  if (changed && !todoDetails.length) writeJsonAtomic(cat.recordsPath, { entries: [...c.records.values()] }, "catalogue");
+  if (changed && !todoDetails.length) saveRecords(c);
 
   const vectors = new Map<number, Float32Array>();
   const out: Movie[] = [];
@@ -115,17 +134,81 @@ export async function ensureVectors(
   return { movies: out, vectors, embedded: todo.length };
 }
 
+/* ---- tonight's pool ---- */
+
+/** US ratings from mildest to strictest. NR (not rated) is left out, so it never fits under an age limit. */
+const US_RATINGS = ["G", "PG", "PG-13", "R", "NC-17"];
+
+/** Does the movie fit tonight's age limit? Without a limit every movie fits. Unrated or unknown ratings never fit under one. */
+export function fitsRating(m: Movie, { certificationLte }: SearchCriteria): boolean {
+  if (certificationLte === undefined) return true;
+  const rank = US_RATINGS.indexOf(m.certification ?? "");
+  return rank >= 0 && rank <= US_RATINGS.indexOf(certificationLte);
+}
+
 /**
- * Pool vectors for a Node process: opens the 235 MB catalogue on first use and keeps it for later calls.
- * The typed chat and the dev server both use this.
+ * Does the movie fit tonight by its own runtime? TMDB's runtime filter is loose (for "at most 120 minutes" it also
+ * returns movies of 150), so every pool is checked against the runtime from the catalogue.
  */
-export function nodeVectorSource(tmdb: TmdbClient) {
+export const fitsRuntime = (m: Movie, { runtime }: SearchCriteria) =>
+  m.runtime !== undefined && m.runtime >= (runtime.min ?? 0) && (runtime.max === undefined || m.runtime <= runtime.max);
+
+/**
+ * The pool from the local copy, or undefined when the copy cannot answer: platforms (they change weekly; only TMDB
+ * knows), or filters wider than what the catalogue walked (fewer votes, shorter movies).
+ */
+export function localPool(c: Catalogue, criteria: SearchCriteria, minVotes: number): Movie[] | undefined {
+  const cov = c.coverage;
+  if (criteria.watch || !cov || minVotes < cov.minVotes || (criteria.runtime.min ?? 0) < cov.minMinutes) return undefined;
+  return [...c.records.values()].filter(
+    (m) =>
+      m.votes >= minVotes &&
+      fitsRuntime(m, criteria) &&
+      !m.genres.some((g) => criteria.excludeGenres.includes(g)) &&
+      fitsRating(m, criteria)
+  );
+}
+
+/**
+ * Tonight's pool and liked-movie vectors for a Node process (the typed chat, and the dev server for the browser).
+ * Opens the 235 MB catalogue on first use and keeps it. Without platforms the pool comes from the local copy, plus
+ * one small TMDB walk over the movies released since the catalogue's last top-up year (new releases get details and
+ * vectors on the spot and join the copy). With platforms, or filters wider than the copy, TMDB is walked. Either
+ * way only movies whose own runtime fits tonight are kept.
+ */
+export function createNodePool(tmdb: TmdbClient, log: (line: string) => void = () => {}) {
   let catalogue: Catalogue | undefined;
   let queue = Promise.resolve() as Promise<unknown>;
-  return (movies: Movie[]) => {
-    // One at a time: two overlapping calls would save the same files concurrently.
-    const run = queue.then(() => ensureVectors(movies, (catalogue ??= openCatalogue()), tmdb));
+  /** One at a time: two overlapping calls would save the same files concurrently. */
+  const serial = <T>(f: (c: Catalogue) => Promise<T>): Promise<T> => {
+    const run = queue.then(() => f((catalogue ??= openCatalogue())));
     queue = run.catch(() => undefined);
     return run;
   };
+
+  const vectorsFor: VectorSource = (movies) => serial((c) => ensureVectors(movies, c, tmdb));
+
+  const pool = (intake: Intake): Promise<Pool> =>
+    serial(async (c) => {
+      const t0 = performance.now();
+      const criteria = poolCriteria(intake);
+      const local = localPool(c, criteria, settings.search.minVotes);
+      let movies: Movie[];
+      if (local) {
+        const since = Number(c.coverage!.updated.slice(0, 4));
+        const recent = await tmdb.pool({ ...criteria, year: { min: since } });
+        const known = new Set(local.map((m) => m.id));
+        const added = recent.filter((m) => !known.has(m.id) && !c.records.has(m.id));
+        if (added.length) log(`[pool] ${added.length} movies released since ${since} are new to the catalogue`);
+        movies = [...local, ...added];
+      } else movies = await tmdb.pool(criteria);
+      const out = await ensureVectors(movies, c, tmdb);
+      const fit = out.movies.filter((m) => fitsRuntime(m, criteria) && fitsRating(m, criteria));
+      return { movies: fit, vectors: out.vectors, embeddedNow: out.embedded, ms: performance.now() - t0, source: local ? "catalogue" : "tmdb" };
+    });
+
+  /** The open catalogue (after the first pool or vectors call), e.g. for the bench's keyword labels. */
+  const opened = () => (catalogue ??= openCatalogue());
+
+  return { pool, vectorsFor, catalogue: opened };
 }

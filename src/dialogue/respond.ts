@@ -2,7 +2,7 @@ import { respondModes, respondSystem, utterances } from "../config/prompts";
 import { settings } from "../config/settings";
 import { hasTaste, stateSummary, tasteProfile } from "../core/state";
 import { recommendationReadiness } from "../core/readiness";
-import type { InformationState, LlmClient, Reply } from "../core/types";
+import type { InformationState, LlmClient, Movie, Reply } from "../core/types";
 
 const { dialogue: d } = settings;
 const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -10,6 +10,19 @@ const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const mentions = (text: string, title: string) => new RegExp(`(^|\\W)${escape(title)}(\\W|$)`, "i").test(text);
 
 type Mode = "explore" | "clarify" | "recommend" | "wrapup";
+
+/** What Jake may say about a movie: only these facts (the prompt forbids anything else). Missing facts are left out. */
+const facts = (m: Movie, descriptionChars: number) => ({
+  title: m.title,
+  year: m.year,
+  genres: m.genres,
+  rating: m.rating,
+  runtimeMinutes: m.runtime,
+  directors: m.directors?.length ? m.directors : undefined,
+  cast: m.cast?.length ? m.cast.slice(0, d.castInFacts) : undefined,
+  tagline: m.tagline,
+  description: m.overview.slice(0, descriptionChars),
+});
 
 /** One LLM call: conversation + state + real TMDB candidates → what to say (and which candidate, if any). */
 export async function respond(llm: LlmClient, is: InformationState): Promise<Reply> {
@@ -41,28 +54,13 @@ export async function respond(llm: LlmClient, is: InformationState): Promise<Rep
         tasteProfile: tasteProfile(is),
         alreadySuggested: is.recommended.map((m) => m.title),
         // suggested movies leave "candidates", so the LLM needs their facts here to answer follow-up questions
-        suggestedDetails: is.recommended.slice(-d.suggestedDetails).map((m) => ({
-          title: m.title,
-          year: m.year,
-          genres: m.genres,
-          rating: m.rating,
-          runtimeMinutes: m.runtime,
-          description: m.overview.slice(0, d.descriptionChars.suggested),
-        })),
+        suggestedDetails: is.recommended.slice(-d.suggestedDetails).map((m) => facts(m, d.descriptionChars.suggested)),
         acceptedMovie: accepted?.title,
         candidatePool: mode === "recommend" ? status : "exploring",
         recommendationReady: mode === "recommend",
         meaningfulUserTurns: readiness.userTurns,
         distinctPreferenceSignals: readiness.distinctSignals,
-        candidates: pool.map((m) => ({
-          id: m.id,
-          title: m.title,
-          year: m.year,
-          genres: m.genres,
-          rating: m.rating,
-          runtimeMinutes: m.runtime,
-          description: m.overview.slice(0, d.descriptionChars.candidate),
-        })),
+        candidates: pool.map((m) => ({ id: m.id, ...facts(m, d.descriptionChars.candidate) })),
         notices: is.private.notices,
       }),
     },

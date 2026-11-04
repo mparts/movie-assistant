@@ -16,9 +16,8 @@ import type { Pool } from "../src/core/pool";
 import { rankPool, type QueryVectors, type Scored } from "../src/core/ranking";
 import { initialIS } from "../src/core/state";
 import type { InformationState, Movie } from "../src/core/types";
-import { ensureVectors, openCatalogue } from "../src/services/catalogue";
+import { createNodePool } from "../src/services/catalogue";
 import { createEmbedQuery } from "../src/services/embeddings";
-import { loadPool } from "../src/services/pool";
 import { createTmdb } from "../src/services/tmdb";
 import family from "../profiles/family.json";
 import solo from "../profiles/solo.json";
@@ -35,8 +34,7 @@ const tmdb = createTmdb({ baseUrl: services.tmdb.upstream, headers: authHeaders(
 const embedQuery = createEmbedQuery({
   url: services[embCfg.service].upstream + embCfg.path, model: embCfg.model, queryPrefix: embCfg.queryPrefix, timeoutMs: embCfg.timeoutMs,
 });
-const catalogue = openCatalogue();
-const vectorsFor = (movies: Movie[]) => ensureVectors(movies, catalogue, tmdb);
+const { pool: loadPool, vectorsFor, catalogue } = createNodePool(tmdb, console.log);
 
 /* ---- labels ---- */
 
@@ -49,7 +47,7 @@ function matches(label: string, m: Movie): boolean {
 }
 const isBad = (w: Wish, m: Movie) =>
   (w.bad ?? []).some((l) => matches(l, m)) ||
-  (catalogue.keywords[m.id] ?? []).some((k) => (w.badKeywords ?? []).includes(k.toLowerCase()));
+  (catalogue().keywords[m.id] ?? []).some((k) => (w.badKeywords ?? []).includes(k.toLowerCase()));
 
 /* ---- running one case ---- */
 
@@ -106,7 +104,7 @@ async function main() {
   const add = (t: { hits: number; of: number; bad: number }, r: Result) => ((t.hits += r.hits), (t.of += r.of), (t.bad += r.bad));
 
   for (const s of suites) {
-    const pool = await loadPool(s.intake, tmdb, vectorsFor);
+    const pool = await loadPool(s.intake);
     console.log(`\n## ${s.label}: ${pool.movies.length} movies in tonight's pool\n`);
     console.log(`| wish | hits | in pool |`);
     console.log(`|---|---|---|`);

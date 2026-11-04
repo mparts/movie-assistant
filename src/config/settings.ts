@@ -18,8 +18,10 @@ export const settings = {
     historyForRespond: 12,
     /** How many suggested movies keep their full facts in the prompt (for "what is it about?"). */
     suggestedDetails: 5,
-    /** Description length per movie in the prompt, and for liked movies in the taste profile. */
-    descriptionChars: { candidate: 220, suggested: 400, seed: 400 },
+    /** Description length per movie in the prompt. */
+    descriptionChars: { candidate: 220, suggested: 400 },
+    /** Top-billed actors Jake is told about per movie (the catalogue keeps `search.castShown`). */
+    castInFacts: 3,
     /** Recommendations start after this many informative user turns AND distinct signals... */
     readiness: { minTurns: 2, minSignals: 2 },
     /**
@@ -57,6 +59,10 @@ export const settings = {
    * Shorter than `intake.minMinutes` or fewer votes than `minVotes` is left out.
    */
   catalogue: {
+    /**
+     * What the catalogue walks (with `intake.minMinutes`). Tonight's pool uses `search.minVotes`: if that is lower,
+     * the catalogue cannot answer alone and the pool comes from TMDB (lower this and run `embed-catalogue` to widen it).
+     */
     minVotes: 100,
     /** Keywords per movie in its embedded text (TMDB orders them roughly by importance). */
     maxKeywords: 15,

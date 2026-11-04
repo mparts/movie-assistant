@@ -10,9 +10,6 @@ dist-ssr
 !.vscode/extensions.json
 .idea
 
-# personal working notes
-todo.md
-done.md
 
 # on-disk caches (embeddings)
 .cache/

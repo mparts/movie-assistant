@@ -8,7 +8,7 @@
  */
 import { authHeaders, embeddings as embCfg, services } from "../src/config/services";
 import { settings } from "../src/config/settings";
-import { ensureVectors, openCatalogue } from "../src/services/catalogue";
+import { ensureVectors, openCatalogue, saveRecords } from "../src/services/catalogue";
 import { createTmdb } from "../src/services/tmdb";
 import { loadEnv } from "./env";
 
@@ -21,7 +21,8 @@ const tmdb = createTmdb({
   minVotes: settings.catalogue.minVotes,
 });
 
-const movies = await tmdb.pool({ excludeGenres: [], runtime: { min: settings.intake.minMinutes }, year: {} });
+const coverage = { minVotes: settings.catalogue.minVotes, minMinutes: settings.intake.minMinutes, updated: new Date().toISOString().slice(0, 10) };
+const movies = await tmdb.pool({ excludeGenres: [], runtime: { min: coverage.minMinutes }, year: {} });
 const withText = movies.filter((m) => m.overview.trim()).length;
 console.log(`TMDB: ${movies.length} movies (${movies.length - withText} without an overview, skipped) · ${secs()}`);
 
@@ -35,5 +36,8 @@ const { vectors, embedded } = await ensureVectors(movies, catalogue, tmdb, {
     console.log(`  ${done} / ${total} embedded · ${secs(t)} · about ${Math.ceil(eta / 60000)} min left`);
   },
 });
+// What this walk covered: tonight's pool may come from the copy only when its filters fall inside it.
+catalogue.coverage = coverage;
+saveRecords(catalogue);
 console.log(`Done: ${vectors.size} movies with vectors of ${catalogue.store.dims || "?"} dims (${embedded} new or changed), ` +
   `${catalogue.records.size} records, in ${secs()}`);

@@ -20,6 +20,8 @@ export interface Movie {
   cast?: string[];
   collection?: string;
   tagline?: string;
+  /** US rating ("PG-13"); "" when TMDB has none. Lets the pool be filtered locally. */
+  certification?: string;
 }
 
 /** What one TMDB details call adds to a movie (with its keywords, which only go into the embedded text). */
@@ -29,6 +31,8 @@ export interface MovieDetails {
   cast: string[];
   collection?: string;
   tagline?: string;
+  /** US rating, "" when there is none. */
+  certification: string;
   keywords: string[];
 }
 

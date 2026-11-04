@@ -23,7 +23,8 @@ function usr<T extends Move["type"]>(is: IS, type: T): MoveOf<T>[] {
   return lu?.speaker === "usr" ? (lu.moves.filter((m) => m.type === type) as MoveOf<T>[]) : [];
 }
 
-const withNotice = (is: IS, notice: string): IS =>
+/** Add a notice for the LLM to mention (what happened behind the scenes this turn), once. */
+export const withNotice = (is: IS, notice: string): IS =>
   is.private.notices.includes(notice) ? is : { ...is, private: { ...is.private, notices: [...is.private.notices, notice] } };
 
 /** A title the user names ("that one" = the movie in focus), looked up among what we know. */
