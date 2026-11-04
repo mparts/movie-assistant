@@ -1,8 +1,8 @@
-import type { Movie, SearchCriteria, TmdbClient } from "../core/types";
-import { isDebug } from "../core/util";
-import { settings } from "../config/settings";
+import type { Movie, SearchCriteria, TmdbClient } from "../core/types.ts";
+import { isDebug } from "../core/util.ts";
+import { settings } from "../config/settings.ts";
 
-export interface TmdbOptions {
+interface TmdbOptions {
   baseUrl: string;
   headers?: Record<string, string>;
   language: string;

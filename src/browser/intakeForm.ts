@@ -25,8 +25,8 @@ interface Draft {
   youngestAge: number;
 }
 
-const freshDraft = (name?: string): Draft => ({
-  name, age: 30, country: localeCountry(), platforms: [], noStream: false,
+const freshDraft = (): Draft => ({
+  age: 30, country: localeCountry(), platforms: [], noStream: false,
   maxMinutes: 120, avoidGenres: [], youngestAge: 10,
 });
 
@@ -139,7 +139,7 @@ const esc = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`)
 const chip = (on: boolean, attrs: string, label: string) =>
   `<button type="button" class="chip${on ? " on" : ""}" aria-pressed="${on}" ${attrs}>${label}</button>`;
 
-export interface IntakeForm {
+interface IntakeForm {
   /** Show the form at a screen: "name" for a new visitor, "tonight" to change tonight's settings mid-evening. */
   open(screen: "name" | "tonight"): void;
   /** Re-check whether "Let's go" may be pressed (call when speech or the machine changes). */

@@ -19,7 +19,7 @@ export const settings = {
     /** Top-billed actors Elisa is told about per movie (the catalogue keeps `search.castShown`). */
     castInFacts: 3,
     /** Elisa suggests once there is taste and the user has spoken this many times (silence does not count). */
-    minUserTurns: 4,
+    minUserTurns: 3,
     /**
      * A reply that is ONLY agreement ("yes", "sounds good", "let's go with that"), judged on the lowercased text with
      * punctuation and apostrophes removed ("let's" → "lets"). Right after a suggested movie it means "I'll take it"

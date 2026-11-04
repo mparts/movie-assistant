@@ -6,7 +6,7 @@
  * prefix (used by the browser: the Vite dev server forwards it to `upstream` and adds the secret,
  * so keys never reach the browser). No proxy prefix may start with another one.
  */
-export interface HttpService {
+interface HttpService {
   upstream: string;
   proxy: string;
   /** Name of the .env.local variable holding the bearer token; omit for open servers. */
@@ -24,7 +24,7 @@ export const services = {
   localLlm: { upstream: "http://localhost:11434/v1", proxy: "/local-llm" },
 } satisfies Record<string, HttpService>;
 
-export type ServiceName = keyof typeof services;
+type ServiceName = keyof typeof services;
 
 export interface LlmBackendConfig {
   name: string;

@@ -1,8 +1,8 @@
 /** The information state: its initial value and read-only views of it. */
-import { settings } from "../config/settings";
-import { certificationFor, Intake } from "./intake";
-import { InformationState as IS, SearchCriteria } from "./types";
-import { last } from "./util";
+import { settings } from "../config/settings.ts";
+import { certificationFor, Intake } from "./intake.ts";
+import { InformationState as IS, SearchCriteria } from "./types.ts";
+import { last } from "./util.ts";
 
 /** Every conversation starts from Phase 1's facts (the form, or a profile file in the typed chat). */
 export const initialIS = (intake: Intake): IS => ({

@@ -4,27 +4,27 @@
  * fetching details and embedding on the spot (then saved). `createNodePool` loads tonight's pool, from the copy when
  * it can (see there). Used by `embed-catalogue`, the typed chat and the dev server (for the browser).
  */
-import { embeddings as embCfg, services } from "../config/services";
-import { settings } from "../config/settings";
-import type { Intake } from "../core/intake";
-import type { Pool, VectorSource } from "../core/pool";
-import { poolCriteria } from "../core/state";
-import type { Movie, SearchCriteria, TmdbClient } from "../core/types";
-import { embedTexts, hash53, movieText } from "./embeddings";
-import { readJson, writeJsonAtomic } from "./jsonFile";
-import { loadVectorStore, vectorStorePath, type VectorStore } from "./vectorStore";
+import { embeddings as embCfg, services } from "../config/services.ts";
+import { settings } from "../config/settings.ts";
+import type { Intake } from "../core/intake.ts";
+import type { Pool } from "../core/pool.ts";
+import { poolCriteria } from "../core/state.ts";
+import type { Movie, SearchCriteria, TmdbClient } from "../core/types.ts";
+import { embedTexts, hash53, movieText } from "./embeddings.ts";
+import { readJson, writeJsonAtomic } from "./jsonFile.ts";
+import { loadVectorStore, vectorStorePath, type VectorStore } from "./vectorStore.ts";
 
 const cat = settings.catalogue;
 
 /** What `embed-catalogue` walked, and when: every TMDB movie with at least `minVotes` votes and `minMinutes` minutes. */
-export interface Coverage {
+interface Coverage {
   minVotes: number;
   minMinutes: number;
   /** ISO date of the walk. Movies released since its year are checked against TMDB at every pool. */
   updated: string;
 }
 
-export interface Catalogue {
+interface Catalogue {
   records: Map<number, Movie>;
   keywords: Record<string, string[]>;
   store: VectorStore;
@@ -47,7 +47,7 @@ export function openCatalogue(): Catalogue {
 export const saveRecords = (c: Catalogue) =>
   writeJsonAtomic(cat.recordsPath, { coverage: c.coverage, entries: [...c.records.values()] }, "catalogue");
 
-export interface EnsureOptions {
+interface EnsureOptions {
   /** Embedding progress (the catalogue script prints it). */
   onProgress?: (done: number, total: number) => void;
   onDetails?: (done: number, total: number) => void;
@@ -150,7 +150,7 @@ export function fitsRating(m: Movie, { certificationLte }: SearchCriteria): bool
  * Does the movie fit tonight by its own runtime? TMDB's runtime filter is loose (for "at most 120 minutes" it also
  * returns movies of 150), so every pool is checked against the runtime from the catalogue.
  */
-export const fitsRuntime = (m: Movie, { runtime }: SearchCriteria) =>
+const fitsRuntime = (m: Movie, { runtime }: SearchCriteria) =>
   m.runtime !== undefined && m.runtime >= (runtime.min ?? 0) && (runtime.max === undefined || m.runtime <= runtime.max);
 
 /**
@@ -170,7 +170,7 @@ export function localPool(c: Catalogue, criteria: SearchCriteria, minVotes: numb
 }
 
 /**
- * Tonight's pool and liked-movie vectors for a Node process (the typed chat, and the dev server for the browser).
+ * Tonight's pool for a Node process (the typed chat, and the dev server for the browser).
  * Opens the 235 MB catalogue on first use and keeps it. Without platforms the pool comes from the local copy, plus
  * one small TMDB walk over the movies released since the catalogue's last top-up year (new releases get details and
  * vectors on the spot and join the copy). With platforms, or filters wider than the copy, TMDB is walked. Either
@@ -185,8 +185,6 @@ export function createNodePool(tmdb: TmdbClient, log: (line: string) => void = (
     queue = run.catch(() => undefined);
     return run;
   };
-
-  const vectorsFor: VectorSource = (movies) => serial((c) => ensureVectors(movies, c, tmdb));
 
   const pool = (intake: Intake): Promise<Pool> =>
     serial(async (c) => {
@@ -210,5 +208,5 @@ export function createNodePool(tmdb: TmdbClient, log: (line: string) => void = (
   /** The open catalogue (after the first pool or vectors call), e.g. for the bench's keyword labels. */
   const opened = () => (catalogue ??= openCatalogue());
 
-  return { pool, vectorsFor, catalogue: opened };
+  return { pool, catalogue: opened };
 }

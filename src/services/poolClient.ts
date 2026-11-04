@@ -1,7 +1,7 @@
 /** The browser's side of the dev server's pool endpoint (vite.config.ts). */
-import type { Intake } from "../core/intake";
-import type { PoolLoader } from "../core/pool";
-import type { Movie } from "../core/types";
+import type { Intake } from "../core/intake.ts";
+import type { PoolLoader } from "../core/pool.ts";
+import type { Movie } from "../core/types.ts";
 
 /** POST an intake → tonight's pool. */
 export const poolRoute = "/pool";

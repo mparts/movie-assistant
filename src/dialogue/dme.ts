@@ -8,7 +8,7 @@
 import { AnyTransitionConfig, assign, fromPromise, sendTo, setup } from "xstate";
 import { notices, utterances } from "../config/prompts";
 import { applyRanking, rules, withNotice } from "../core/rules";
-import type { DMEContext, DMEEvent, EmbedQuery, InformationState, LlmClient, Move } from "../core/types";
+import type { DMEContext, EmbedQuery, InformationState, LlmClient, Move, SaysMovesEvent } from "../core/types";
 import { flushTimings, isDebug, timed, timedSync } from "../core/util";
 import { respond } from "./respond";
 import { understand } from "./nlu";
@@ -58,7 +58,7 @@ export const queryVectors = (c: DMEContext) => ({
 });
 
 export const dme = setup({
-  types: {} as { input: DMEContext; context: DMEContext; events: DMEEvent },
+  types: {} as { input: DMEContext; context: DMEContext; events: SaysMovesEvent },
   guards: {
     isu: ({ context }, params: { name: string }) => !!rules[params.name](context),
     isUserSpeech: ({ event }) => {

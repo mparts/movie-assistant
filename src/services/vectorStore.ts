@@ -7,10 +7,9 @@
  */
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-import { readJson } from "./jsonFile";
+import { readJson } from "./jsonFile.ts";
 
 export interface VectorStore {
-  readonly model: string;
   /** 0 until the first vector is added to an empty store. */
   readonly dims: number;
   readonly size: number;
@@ -47,7 +46,6 @@ export function loadVectorStore(base: string, model: string): VectorStore {
   }
 
   return {
-    model,
     get dims() {
       return dims;
     },

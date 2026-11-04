@@ -1,5 +1,5 @@
 /** Embeddings through Ollama: the movie text, one batch request, and the query side (wish and avoid texts). */
-import type { EmbedQuery, Movie } from "../core/types";
+import type { EmbedQuery, Movie } from "../core/types.ts";
 
 /**
  * The text a movie is embedded as: `title (year). Genres: … . overview Keywords: ….` The catalogue and movies embedded

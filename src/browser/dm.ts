@@ -13,12 +13,12 @@ import { initialIS } from "../core/state";
 import { spokenText } from "../core/util";
 import type { DMContext, DMEContext, DMEvent } from "../core/types";
 import { createClients } from "../services";
-import { fetchPool } from "../services/poolVectorsClient";
+import { fetchPool } from "../services/poolClient";
 import { createTurnLog, describePool, describeTonight, logState } from "../dialogue/debugView";
 import { dme } from "../dialogue/dme";
 
 const turnLog = createTurnLog();
-const clients = createClients("proxy", {}, { onLlmAnswer: turnLog.onLlmAnswer });
+const { llm, embedQuery } = createClients("proxy", {}, { onLlmAnswer: turnLog.onLlmAnswer });
 
 const speechSettings: Settings = {
   azureCredentials: { endpoint: azure.tokenEndpoint, key: import.meta.env.VITE_AZURE_KEY },
@@ -42,7 +42,7 @@ const dmMachine = setup({
   },
   types: {} as { context: DMContext; events: DMEvent },
 }).createMachine({
-  context: ({ spawn }) => ({ ssRef: spawn(speechstate, { input: speechSettings }), ...clients }),
+  context: ({ spawn }) => ({ ssRef: spawn(speechstate, { input: speechSettings }), llm, embedQuery }),
   id: "DM",
   initial: "Prepare",
   states: {
@@ -146,7 +146,6 @@ const dmMachine = setup({
             id: "dmeID",
             input: ({ context, self }) => ({
               parentRef: self,
-              tmdb: context.tmdb,
               llm: context.llm,
               embedQuery: context.embedQuery,
               pool: context.pool as Pool, // set by FindingMovies, the only way into Main

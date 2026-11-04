@@ -25,7 +25,7 @@ export interface Movie {
 }
 
 /** What one TMDB details call adds to a movie (with its keywords, which only go into the embedded text). */
-export interface MovieDetails {
+interface MovieDetails {
   runtime?: number;
   directors: string[];
   cast: string[];
@@ -36,7 +36,7 @@ export interface MovieDetails {
   keywords: string[];
 }
 
-export type Speaker = "usr" | "sys";
+type Speaker = "usr" | "sys";
 export type Turn = { speaker: Speaker; text: string };
 
 /**
@@ -74,7 +74,7 @@ export interface Reply {
   mode?: NlgMode;
 }
 
-export type Range = { min?: number; max?: number };
+type Range = { min?: number; max?: number };
 
 /** Plain JSON on purpose: loggable and diffable. Tonight's movies (the pool) are a resource, not part of it. */
 export interface InformationState {
@@ -155,7 +155,6 @@ export type EmbedQuery = (text: string) => Promise<Float32Array>;
 /** What the DME works with besides the information state: services and resources. */
 export interface DMEContext extends TotalInformationState {
   parentRef: any;
-  tmdb: TmdbClient;
   llm: LlmClient;
   embedQuery: EmbedQuery;
   /** Tonight's movies, loaded when Phase 1 ended: what gets ranked. */
@@ -170,7 +169,6 @@ export interface DMEContext extends TotalInformationState {
 export interface DMContext {
   ssRef: any;
   embedQuery: EmbedQuery;
-  tmdb: TmdbClient;
   llm: LlmClient;
   is?: InformationState;
   pool?: Pool;
@@ -188,8 +186,6 @@ export type DMEvent =
   | { type: "GO_ANYWAY" }
   | SpeechStateExternalEvent
   | NextMovesEvent;
-
-export type DMEEvent = SaysMovesEvent;
 
 /** User speech arrives as raw `text` (the DME asks the LLM to understand it); silence as a noinput move. */
 export type SaysMovesEvent = {

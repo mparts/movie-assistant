@@ -112,7 +112,6 @@ export const rules: Record<string, Rule> = {
       );
   },
 
-
   integrate_seen_reject: ({ is }) => {
     const ms = [
       ...usr(is, "seen").map((m) => ({ title: m.title, reason: "seen" as const })),

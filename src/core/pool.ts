@@ -14,17 +14,11 @@ export interface Pool {
   source: "catalogue" | "tmdb";
 }
 
-/**
- * The catalogue's copy of these movies (with details: runtime, credits) and their vectors. Node: the local catalogue;
- * browser: the dev server. Movies without a vector are left out.
- */
-export type VectorSource = (movies: Movie[]) => Promise<{ movies: Movie[]; vectors: Map<number, Float32Array>; embedded: number }>;
-
 /** Loads tonight's pool when Phase 1 ends. Node: the catalogue (or TMDB); browser: the dev server, which does the same. */
 export type PoolLoader = (intake: import("./intake").Intake) => Promise<Pool>;
 
 /** Enough movies to talk about, too few (the user may go anyway), or none at all. */
-export type PoolCheck = "ok" | "small" | "empty";
+type PoolCheck = "ok" | "small" | "empty";
 
 export const poolCheck = (pool: Pick<Pool, "movies">): PoolCheck =>
   pool.movies.length === 0 ? "empty" : pool.movies.length < settings.pool.minPool ? "small" : "ok";

@@ -2,7 +2,7 @@ import { defineConfig, loadEnv, type Plugin, type ProxyOptions } from "vite";
 // Explicit .ts extensions: Vite's coming native config loader requires them.
 import { authHeaders, services } from "./src/config/services.ts";
 import { settings } from "./src/config/settings.ts";
-import { poolRoute } from "./src/services/poolVectorsClient.ts";
+import { poolRoute } from "./src/services/poolClient.ts";
 import { createNodePool } from "./src/services/catalogue.ts";
 import { parseIntake } from "./src/core/intake.ts";
 import { createTmdb } from "./src/services/tmdb.ts";
@@ -43,28 +43,22 @@ function poolEndpoint(env: Record<string, string>): Plugin {
     res.end(Buffer.concat([json, Buffer.alloc((4 - (json.length % 4)) % 4), Buffer.from(rows.buffer)]));
   }
 
-  const handle =
-    (work: (body: unknown) => Promise<void>) =>
-    (req: import("node:http").IncomingMessage, res: import("node:http").ServerResponse) => {
-      if (req.method !== "POST") return void ((res.statusCode = 405), res.end());
-      jsonBody(req)
-        .then(work)
-        .catch((e) => {
-          console.warn(`[${req.url}]`, e);
-          res.statusCode = 500;
-          res.end(String((e as Error).message));
-        });
-    };
-
   return {
     name: "pool",
     configureServer(server) {
-      server.middlewares.use(poolRoute, (req, res) =>
-        handle(async (body) => {
-          const pool = await nodePool().pool(parseIntake(body));
-          send(res, pool.movies, pool.vectors, { "x-source": pool.source, "x-embedded": String(pool.embeddedNow) });
-        })(req, res)
-      );
+      server.middlewares.use(poolRoute, (req, res) => {
+        if (req.method !== "POST") return void ((res.statusCode = 405), res.end());
+        jsonBody(req)
+          .then(async (body) => {
+            const pool = await nodePool().pool(parseIntake(body));
+            send(res, pool.movies, pool.vectors, { "x-source": pool.source, "x-embedded": String(pool.embeddedNow) });
+          })
+          .catch((e) => {
+            console.warn(`[${req.url}]`, e);
+            res.statusCode = 500;
+            res.end(String((e as Error).message));
+          });
+      });
     },
   };
 }

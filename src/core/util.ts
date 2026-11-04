@@ -1,4 +1,4 @@
-import type { Move } from "./types";
+import type { Move } from "./types.ts";
 
 export const last = <T>(xs: T[]): T | undefined => xs[xs.length - 1];
 
@@ -8,8 +8,6 @@ export const spokenText = (moves: Move[]) => moves.flatMap((m) => (m.type === "s
 const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 /** Does `text` name this movie title? Whole words, any case: "Up" is not in "supper". */
 export const namesTitle = (text: string, title: string) => new RegExp(`(^|\\W)${escape(title)}(\\W|$)`, "i").test(text);
-export const sameIds = <T extends { id: number }>(a: T[], b: T[]) =>
-  a.length === b.length && a.every((m, i) => m.id === b[i].id);
 
 /** Dump the full information state when `DEBUG=1` (node) or `globalThis.DME_DEBUG = true` (browser). */
 export const isDebug = () => !!(globalThis as any).DME_DEBUG || !!(globalThis as any).process?.env?.DEBUG;

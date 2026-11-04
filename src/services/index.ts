@@ -6,7 +6,7 @@ import { createEmbedQuery } from "./embeddings";
 import { createLlm, LlmBackend, type LlmAnswer } from "./llm";
 import { createTmdb } from "./tmdb";
 
-export interface Clients {
+interface Clients {
   tmdb: TmdbClient;
   llm: LlmClient;
   embedQuery: EmbedQuery;

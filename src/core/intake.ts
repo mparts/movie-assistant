@@ -1,6 +1,6 @@
 /** Phase 1: the hard facts from the settings form (or a profile file in the typed chat), checked once and then read-only. */
-import { settings } from "../config/settings";
-import { GENRES } from "./lexicon";
+import { settings } from "../config/settings.ts";
+import { GENRES } from "./lexicon.ts";
 
 export type Company = "alone" | "relationship" | "family" | "friends";
 const COMPANIES: Company[] = ["alone", "relationship", "family", "friends"];
