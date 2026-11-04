@@ -43,10 +43,11 @@ export const settings = {
     /** Used when a call passes no options. */
     defaults: { temperature: 0, maxTokens: 800 },
     /**
-     * Understanding is structured extraction: deterministic, and fine on a 7-8B model. Tried in this order (the local
-     * model needs no tunnel), so Groq (last) is only reached when both are unavailable.
+     * Understanding is structured extraction: deterministic, and fine on a 7-8B model. University first, because the
+     * local GPU is taken by the embedding model (qwen3-embedding:4b does not fit beside qwen2.5:7b); Groq next; the
+     * local model (not in this list) stays last, as a last resort.
      */
-    understand: { temperature: 0, maxTokens: 800, purpose: "NLU", prefer: ["local", "ollama"] as string[] | undefined },
+    understand: { temperature: 0, maxTokens: 800, purpose: "NLU", prefer: ["ollama", "groq"] as string[] | undefined },
     /** Jake's replies: no preference, so the configured order applies (Groq first, then the others as fallbacks). */
     respond: { temperature: 0.7, maxTokens: 1200, purpose: "NLG", prefer: undefined as string[] | undefined },
   },
@@ -62,6 +63,23 @@ export const settings = {
   runtimeCache: {
     path: ".cache/runtimes.json",
     maxEntries: 20000,
+  },
+
+  /**
+   * The movie catalogue embedded ahead of time (`npm run embed-catalogue`): every movie a Phase 1 pool could hold.
+   * Shorter than `intake.minMinutes` or fewer votes than `minVotes` is left out.
+   */
+  catalogue: {
+    minVotes: 100,
+    /** Keywords per movie in its embedded text (TMDB orders them roughly by importance). */
+    maxKeywords: 15,
+    /** Parallel TMDB requests (TMDB allows about 50 per second). */
+    concurrency: 20,
+    /** Embedding requests between saves (a crash loses at most that much work). */
+    saveEvery: 25,
+    keywordsPath: ".cache/keywords.json",
+    /** `<model>` is replaced by the embedding model's name; `.bin` holds the vectors, `.json` the index. */
+    vectorsPath: ".cache/vectors-<model>",
   },
 
   /** Phase 1 (the form) → TMDB filters. */

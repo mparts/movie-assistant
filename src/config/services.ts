@@ -59,12 +59,13 @@ export const embeddings = {
   enabled: true,
   service: "localOllama" as ServiceName,
   path: "/embed",
-  model: "nomic-embed-text",
-  /** nomic-embed-text is trained with these task prefixes; other models usually need none. */
-  queryPrefix: "search_query: ",
-  documentPrefix: "search_document: ",
-  batchSize: 64,
-  timeoutMs: 20_000,
+  /** Chosen in the spike (todo.md): by far the strongest raw similarity of the models tried. 2,560 dims. */
+  model: "qwen3-embedding:4b",
+  /** qwen3-embedding wants an instruction on the query side only. */
+  queryPrefix: "Instruct: Given a description of a movie someone wants to watch, retrieve movies that match it\nQuery: ",
+  documentPrefix: "",
+  batchSize: 32,
+  timeoutMs: 60_000,
 };
 
 /** Azure speech (browser only). The key is VITE_AZURE_KEY in .env.local. */

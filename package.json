@@ -12,7 +12,8 @@
     "probe": "tsx scripts/probe.ts",
     "chat": "tsx scripts/chat.ts",
     "nlu-bench": "tsx scripts/nlu-bench.ts",
-    "spike": "tsx scripts/spike-semantic.ts"
+    "spike": "tsx scripts/spike-semantic.ts",
+    "embed-catalogue": "tsx scripts/embed-catalogue.ts"
   },
   "devDependencies": {
     "@types/node": "^26.6.6",

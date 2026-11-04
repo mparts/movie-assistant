@@ -38,8 +38,44 @@ export interface EmbeddingStore {
   save(model: string, entries: Map<string, number[]>): void;
 }
 
+/**
+ * The text a movie is embedded as: `title (year). Genres: … . overview Keywords: ….` The catalogue and movies embedded
+ * on the spot must use exactly this, or their vectors are not comparable.
+ */
+export function movieText(m: Pick<Movie, "title" | "year" | "genres" | "overview">, keywords: string[], maxKeywords: number): string {
+  const kw = keywords.slice(0, maxKeywords);
+  return (
+    `${m.title}${m.year ? ` (${m.year})` : ""}. Genres: ${m.genres.join(", ") || "none"}. ${m.overview.trim()}` +
+    (kw.length ? ` Keywords: ${kw.join(", ")}.` : "")
+  );
+}
+
+/** One request to Ollama's batch endpoint (…/api/embed). Long texts are truncated to the model's context. */
+export async function embedTexts(url: string, model: string, texts: string[], timeoutMs: number): Promise<number[][]> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model, input: texts, truncate: true }),
+      signal: ctrl.signal,
+    });
+    if (!res.ok) throw new Error(`Ollama embeddings HTTP ${res.status}`);
+    const { embeddings } = (await res.json()) as { embeddings?: unknown };
+    const valid =
+      Array.isArray(embeddings) &&
+      embeddings.length === texts.length &&
+      embeddings.every((v) => Array.isArray(v) && v.length > 0 && v.every((n) => Number.isFinite(n)));
+    if (!valid) throw new Error("Ollama returned invalid embeddings");
+    return embeddings as number[][];
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /** Small non-cryptographic 53-bit hash (works in browser and Node): short, stable cache keys for long texts. */
-function hash53(text: string): string {
+export function hash53(text: string): string {
   let h1 = 0xdeadbeef, h2 = 0x41c6ce57;
   for (let i = 0; i < text.length; i++) {
     const c = text.charCodeAt(i);
@@ -66,28 +102,7 @@ export function createEmbedder(o: EmbedderOptions): Embedder {
     }
   }
 
-  async function embed(texts: string[]): Promise<number[][]> {
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), o.timeoutMs);
-    try {
-      const res = await fetch(o.url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ model: o.model, input: texts }),
-        signal: ctrl.signal,
-      });
-      if (!res.ok) throw new Error(`Ollama embeddings HTTP ${res.status}`);
-      const { embeddings } = (await res.json()) as { embeddings?: unknown };
-      const valid =
-        Array.isArray(embeddings) &&
-        embeddings.length === texts.length &&
-        embeddings.every((v) => Array.isArray(v) && v.length > 0 && v.every((n) => Number.isFinite(n)));
-      if (!valid) throw new Error("Ollama returned invalid embeddings");
-      return embeddings as number[][];
-    } finally {
-      clearTimeout(timer);
-    }
-  }
+  const embed = (texts: string[]) => embedTexts(o.url, o.model, texts, o.timeoutMs);
 
   interface Item { key: string; text: string; persist: boolean }
 

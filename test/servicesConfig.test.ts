@@ -10,10 +10,10 @@ describe("service config", () => {
   });
 
 
-  test("NLU tries the local model, then the university one, and Groq last; NLG starts with Groq", () => {
+  test("NLU tries the university model, then Groq, and the local one last; NLG starts with Groq", () => {
     const on = llmBackends.filter((b) => b.enabled !== false);
     const names = (prefer?: string | string[]) => orderByPreference(on, prefer).map((b) => b.name);
-    expect(names(settings.llm.understand.prefer)).toEqual(["local", "ollama", "groq"]);
+    expect(names(settings.llm.understand.prefer)).toEqual(["ollama", "groq", "local"]);
     expect(names(settings.llm.respond.prefer)).toEqual(["groq", "ollama", "local"]);
   });
 
