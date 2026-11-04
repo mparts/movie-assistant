@@ -2,8 +2,7 @@ import { describe, expect, test, vi } from "vitest";
 import { rules } from "../src/core/rules";
 import { freshIS } from "./fixtures";
 import type { InformationState as IS, LlmClient, Move, Movie } from "../src/core/types";
-import { ground, isAffirmation, repairMoves } from "../src/dialogue/grounding";
-import { understand } from "../src/dialogue/nlu";
+import { ground, isAffirmation, repairMoves, understand } from "../src/dialogue/nlu";
 import { respond } from "../src/dialogue/respond";
 
 const movie = (id: number, title: string): Movie => ({ id, title, genres: ["Comedy"], rating: 7, votes: 100, overview: "A film" });

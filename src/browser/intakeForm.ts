@@ -4,8 +4,7 @@
  */
 import { formText as T } from "../config/prompts";
 import { services } from "../config/services";
-import { certificationFor, parseIntake, type Company, type Intake } from "../core/intake";
-import { GENRES } from "../core/lexicon";
+import { certificationFor, GENRES, parseIntake, type Company, type Intake } from "../core/intake";
 
 type Screen = "name" | "welcome" | "profile" | "tonight";
 type Provider = { id: number; name: string; logo?: string };

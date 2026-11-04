@@ -1,6 +1,12 @@
 /** Phase 1: the hard facts from the settings form (or a profile file in the typed chat), checked once and then read-only. */
 import { settings } from "../config/settings.ts";
-import { GENRES } from "./lexicon.ts";
+
+/** Genre names as TMDB spells them, for the settings form. Ids come from TMDB at runtime. */
+export const GENRES = [
+  "Action", "Adventure", "Animation", "Comedy", "Crime", "Documentary",
+  "Drama", "Family", "Fantasy", "History", "Horror", "Music", "Mystery",
+  "Romance", "Science Fiction", "Thriller", "War", "Western",
+];
 
 export type Company = "alone" | "relationship" | "family" | "friends";
 const COMPANIES: Company[] = ["alone", "relationship", "family", "friends"];

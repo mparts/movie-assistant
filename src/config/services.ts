@@ -24,6 +24,9 @@ export const services = {
   localLlm: { upstream: "http://localhost:11434/v1", proxy: "/local-llm" },
 } satisfies Record<string, HttpService>;
 
+/** POST an intake → tonight's pool. */
+export const poolRoute = "/pool";
+
 type ServiceName = keyof typeof services;
 
 export interface LlmBackendConfig {

@@ -1,8 +1,7 @@
 import { defineConfig, loadEnv, type Plugin, type ProxyOptions } from "vite";
 // Explicit .ts extensions: Vite's coming native config loader requires them.
-import { authHeaders, services } from "./src/config/services.ts";
+import { authHeaders, poolRoute, services } from "./src/config/services.ts";
 import { settings } from "./src/config/settings.ts";
-import { poolRoute } from "./src/services/poolClient.ts";
 import { createNodePool } from "./src/services/catalogue.ts";
 import { parseIntake } from "./src/core/intake.ts";
 import { createTmdb } from "./src/services/tmdb.ts";
