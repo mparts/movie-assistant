@@ -20,13 +20,16 @@ const facts = (m: Movie, descriptionChars: number) => ({
 });
 
 /**
- * How Elisa replies to this state, and why: wrap-up once a suggestion was accepted, recommend once there is taste and
- * the user has spoken `minUserTurns` times (silence does not count), explore before that.
+ * How Elisa replies to this state, and why: wrap-up once a suggestion was accepted, discuss while the last suggestion
+ * is not turned down or seen, recommend once there is taste and the user has spoken `minUserTurns` times (silence does
+ * not count), explore before that.
  */
 export function replyMode(is: InformationState): { mode: Mode; accepted?: Movie; why: string } {
   const userTurns = is.history.filter((t) => t.speaker === "usr" && t.text !== d.silenceMarker).length;
   const accepted = is.accepted === undefined ? undefined : is.recommended.find((m) => m.id === is.accepted);
   if (accepted) return { mode: "wrapup", accepted, why: `accepted ${accepted.title}` };
+  const open = last(is.recommended);
+  if (open && !is.rejected.some((r) => r.id === open.id)) return { mode: "discuss", why: `${open.title} not turned down` };
   const taste = hasTaste(is);
   const mode: Mode = taste && userTurns >= d.minUserTurns ? "recommend" : "explore";
   return { mode, why: `taste ${taste ? "yes" : "no"}, user turns ${userTurns} of ${d.minUserTurns}` };
@@ -62,13 +65,12 @@ export async function respond(llm: LlmClient, is: InformationState): Promise<Rep
       .map((t): ChatMessage => (t.speaker === "usr" ? { role: "user", content: t.text } : { role: "assistant", content: JSON.stringify({ say: t.text }) })),
   ];
 
-  // In explore mode the LLM must not name movies. Wrap-up may name the accepted movie, even if another candidate has
-  // the same title (e.g. two films called "Solaris").
-  const forbiddenTitles = (mode === "wrapup"
-    ? is.candidates.filter((m) => m.title !== accepted?.title)
-    : [...is.candidates, ...is.recommended])
+  // Outside recommend mode the LLM must not name movies, except the one in focus: the accepted movie in wrap-up (even
+  // if another candidate has the same title, e.g. two films called "Solaris"), the open suggestion in discuss mode.
+  const allowed = mode === "explore" ? undefined : focus?.title;
+  const forbiddenTitles = (mode === "wrapup" ? is.candidates : [...is.candidates, ...is.recommended])
     .map((m) => m.title)
-    .filter((t) => t.length >= 4);
+    .filter((t) => t !== allowed && t.length >= 4);
 
   for (let attempt = 0; attempt < d.respondAttempts; attempt++) {
     const out: any = await llm.json(messages, settings.llm.respond);
@@ -86,8 +88,9 @@ export async function respond(llm: LlmClient, is: InformationState): Promise<Rep
       const named = id === undefined ? pool.filter((m) => m.title.length >= 4 && namesTitle(say, m.title)) : [];
       return { say, movieId: named.length === 1 ? named[0].id : id, mode };
     }
-    if ((mode !== "wrapup" && id !== undefined) || forbiddenTitles.some((t) => namesTitle(say, t))) {
-      console.warn("[respond] Premature recommendation blocked; retrying");
+    const named = forbiddenTitles.find((t) => namesTitle(say, t));
+    if ((mode !== "wrapup" && id !== undefined) || named) {
+      console.warn(`[respond] Premature recommendation blocked (${named ? `names "${named}"` : `recommend ${id}`}): "${say}"; retrying`);
       continue;
     }
     return { say, mode };
@@ -95,5 +98,6 @@ export async function respond(llm: LlmClient, is: InformationState): Promise<Rep
 
   if (mode === "wrapup") return { say: utterances.wrapupFallback, mode };
   if (mode === "explore") return { say: utterances.exploreFallback, mode };
+  if (mode === "discuss") return { say: utterances.discussFallback, mode };
   throw new Error("LLM kept recommending a movie outside the candidates");
 }

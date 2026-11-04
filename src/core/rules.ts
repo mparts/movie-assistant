@@ -159,5 +159,6 @@ export const rules: Record<string, Rule> = {
 function qudAfter(mode: NlgMode, suggested: boolean): Qud | undefined {
   if (mode === "explore") return "taste";
   if (mode === "wrapup") return "none";
+  if (mode === "discuss") return "suggestion";
   return suggested ? "suggestion" : undefined;
 }

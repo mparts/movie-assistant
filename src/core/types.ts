@@ -62,7 +62,7 @@ export type MoveOf<T extends Move["type"]> = Extract<Move, { type: T }>;
 export type Understood = { moves: Move[]; dropped: Move[] };
 
 /** How Elisa was told to reply this turn (prompts.ts `respondModes`). */
-export type NlgMode = "explore" | "recommend" | "wrapup";
+export type NlgMode = "explore" | "recommend" | "discuss" | "wrapup";
 
 /** What Elisa's last turn left open: a taste question, the movie Elisa suggested, or nothing. */
 export type Qud = "taste" | "suggestion" | "none";
