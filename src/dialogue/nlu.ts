@@ -1,9 +1,9 @@
-import { understandSystem } from "../config/prompts";
+import { repairWishSystem, understandByQud, understandCore } from "../config/prompts";
 import { settings } from "../config/settings";
 import { lastSuggested, stateSummary } from "../core/state";
 import type { InformationState, LlmClient, Move } from "../core/types";
 import { isDebug } from "../core/util";
-import { ground, isAffirmation, repairMoves } from "./grounding";
+import { ground, isAffirmation, missedWords, repairMoves, splitRefusals } from "./grounding";
 
 const str = (x: unknown) => (typeof x === "string" && x.trim() ? x.trim() : undefined);
 
@@ -74,7 +74,7 @@ export async function understand(llm: LlmClient, text: string, is: InformationSt
 
   const out: any = await llm.json(
     [
-      { role: "system", content: understandSystem },
+      { role: "system", content: understandCore + understandByQud[is.qud] },
       {
         role: "user",
         content: JSON.stringify({
@@ -91,5 +91,48 @@ export async function understand(llm: LlmClient, text: string, is: InformationSt
   if (isDebug()) console.log(`[NLU raw] ${JSON.stringify(raw)}`);
   const moves = repairMoves(raw.map(clean).filter((m): m is Move => m !== null), is.wish, raw);
   const lastTurn = is.history[is.history.length - 1];
-  return ground(moves, text, lastTurn?.speaker === "sys" ? lastTurn.text : undefined, suggested, is.wish);
+  const lastSystem = lastTurn?.speaker === "sys" ? lastTurn.text : undefined;
+  const grounded = ground(moves, text, lastSystem, suggested, is.wish);
+  const missing = logMisses(text, moves, grounded, suggested);
+  return missing.length ? repairWish(llm, text, grounded, missing, is.wish, lastSystem) : grounded;
+}
+
+/** A lost wish: the user's words are missing from the moves, or a "like" for the movie Jake just suggested was dropped. */
+function logMisses(text: string, before: Move[], after: Move[], suggested: string | null): string[] {
+  const missing = missedWords(text, after);
+  if (missing.length) console.warn(`[NLU miss] missing: ${missing.join(", ")} in "${text}"`);
+  const dropped = before.find((m) => m.type === "like" && !after.includes(m) && suggested && m.title.toLowerCase() === suggested.toLowerCase());
+  if (dropped) console.warn(`[NLU miss] dropped like for the suggested movie: ${suggested}`);
+  return missing;
+}
+
+/**
+ * One narrow call that puts the missing words back into the wish. Kept only if fewer of the user's words are missing
+ * afterwards; otherwise (or if the call fails, or the model says it was no wish) the moves stay as they were.
+ */
+async function repairWish(llm: LlmClient, text: string, moves: Move[], missing: string[], oldWish: string, lastSystem?: string): Promise<Move[]> {
+  const current = [...moves].reverse().find((m): m is Extract<Move, { type: "wish" }> => m.type === "wish")?.text ?? oldWish;
+  try {
+    const out: any = await llm.json(
+      [
+        { role: "system", content: repairWishSystem },
+        { role: "user", content: JSON.stringify({ wish: current || null, utterance: text, missingWords: missing, assistantSaid: lastSystem ?? null }) },
+      ],
+      settings.llm.repair
+    );
+    const wish = str(out?.wish);
+    if (!wish) return moves;
+    const split = splitRefusals(wish);
+    const repaired: Move[] = [
+      ...moves.filter((m) => m.type !== "wish"),
+      ...(split.wish ? [{ type: "wish" as const, text: split.wish }] : []),
+      ...split.avoid.filter((a) => !moves.some((m) => m.type === "avoid" && m.text === a)).map((a): Move => ({ type: "avoid", text: a })),
+    ];
+    if (missedWords(text, repaired).length >= missing.length) return moves;
+    console.info(`[NLU repair] ${JSON.stringify(current)} → ${JSON.stringify(split.wish)}${split.avoid.length ? `, avoid ${JSON.stringify(split.avoid)}` : ""}`);
+    return repaired;
+  } catch (e) {
+    console.warn("[NLU repair failed]", e);
+    return moves;
+  }
 }

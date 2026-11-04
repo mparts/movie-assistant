@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { cases, formatTable, percentile, runBench } from "../scripts/nluBench";
-import type { LlmClient } from "../src/core/types";
+import type { LlmClient, Move } from "../src/core/types";
+import { missedWords } from "../src/dialogue/grounding";
 
 /** Answers each case's utterance with the given moves; anything else (the warm-up) gets no moves. */
 const stubFor = (answers: Record<string, unknown[]>): LlmClient => ({
@@ -68,5 +69,13 @@ describe("NLU bench", () => {
     const table = formatTable([{ model: "m1", warmupMs: 3000, summary: s }]).split("\n");
     expect(table).toHaveLength(3);
     expect(table[2]).toMatch(/^m1\s+12\/15\s+2\s+1\s+640\s+1200\s+3000$/);
+  });
+
+  test("a correct answer raises no lost-wish warning, except where it paraphrases the user's words", () => {
+    const flagged = Object.entries(perfect)
+      .map(([u, moves]) => [u, missedWords(u, moves as Move[])] as const)
+      .filter(([, missing]) => missing.length);
+    // A word check cannot see synonyms: "scary" → "creepy", "gory" → "gore".
+    expect(flagged).toEqual([["something scary with ghosts, but not gory", ["scary", "gory"]]]);
   });
 });

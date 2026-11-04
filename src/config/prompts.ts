@@ -3,6 +3,7 @@
  */
 import type { Company, Intake } from "../core/intake";
 import { GENRES } from "../core/lexicon";
+import type { Qud } from "../core/types";
 import { settings } from "./settings";
 
 const thisYear = new Date().getFullYear();
@@ -41,8 +42,8 @@ export const notices = {
   personNotInPool: (name: string) => `None of tonight's movies feature ${name}.`,
 };
 
-/** Turns one utterance into structured moves. */
-export const understandSystem = `You turn ONE spoken utterance from a person who is choosing a movie into structured notes. Output ONLY a JSON object: {"moves":[...]}.
+/** Turns one utterance into structured moves. Followed by the block for the question under discussion. */
+export const understandCore = `You turn ONE spoken utterance from a person who is choosing a movie into structured notes. Output ONLY a JSON object: {"moves":[...]}.
 
 Record only what the person actually expressed. Greetings, small talk, or questions to the assistant give {"moves":[]}.
 
@@ -61,7 +62,7 @@ Move types:
 Genres are exactly: ${GENRES.join(", ")}. A mood or feeling ("funny", "scary", "cozy") is NOT a genre move: it goes in the wish.
 Today's year is ${thisYear}. "Recent" or "the last few years" means ${recentFrom} or later.
 Use the conversation and the known state to resolve "that", "it", "the first one". Several moves per utterance are fine. Speech recognition may mishear titles and names: if one looks misheard, write the most likely real title or name.
-The assistant's last turn is context, not the person's words: never record something only the assistant said, including the options it offered. If the person picks one ("the second one", "yeah, that one"), record that option; if they answer without choosing ("no idea", "you decide"), record nothing. A "yes" to a question that proposed something other than a movie means that thing: record the move that carries it out. A "no" belongs only to the words right after it: "no, not that one, something funnier" rejects the movie and makes the wish funnier; it does not avoid comedy.
+The assistant's last turn is context, not the person's words: never record something only the assistant said, including the options it offered.
 
 Examples:
 "something cozy to watch with my girlfriend" -> {"moves":[{"type":"wish","text":"A cozy, warm romantic movie for a relaxed date night."}]}
@@ -74,14 +75,38 @@ Examples:
 "anything with Keanu Reeves? but please no Adam Sandler" -> {"moves":[{"type":"person","name":"Keanu Reeves"},{"type":"person","name":"Adam Sandler","negated":true}]}
 "I only have about ninety minutes" -> {"moves":[{"type":"constrain","slot":"runtime","op":"lte","value":90}]}
 "please, nothing with Will Ferrell" -> {"moves":[{"type":"person","name":"Will Ferrell","negated":true}]}
+"hi, how are you?" -> {"moves":[]}`;
+
+/** What the assistant's last turn left open, and the rules and examples that go with it. */
+export const understandByQud: Record<Qud, string> = {
+  taste: `
+The assistant just asked about their taste, maybe offering options. If the person picks one ("the second one", "yeah, that one"), record that option; if they answer without choosing ("no idea", "you decide"), record nothing.
+(the assistant had asked "more of a cozy night, or something with some action?") "the cozy one, definitely" -> {"moves":[{"type":"wish","text":"A cozy, heartwarming feel-good movie."}]}
+(same question) "hmm, no idea, you pick" -> {"moves":[]}`,
+  suggestion: `
+The assistant just suggested the movie in "lastSuggestedMovie". If they describe what they'd rather have (a topic, a setting, who it's for), that is new taste, even without a "no": rewrite the wish with their words. The suggested movie is the assistant's pick, never a "like". Keep the exact words the person used for anything new (a topic, a creature, a setting, a mood); never swap them for a similar word from the old wish. A "no" belongs only to the words right after it: "no, not that one, something funnier" rejects the movie and makes the wish funnier; it does not avoid comedy.
 "I've already seen that one" -> {"moves":[{"type":"seen"}]}
 "it isn't even christmas" (after a christmas movie was suggested) -> {"moves":[{"type":"reject"},{"type":"avoid","text":"christmas"}]}
-"hi, how are you?" -> {"moves":[]}
-(the assistant had asked "more of a cozy night, or something with some action?") "the cozy one, definitely" -> {"moves":[{"type":"wish","text":"A cozy, heartwarming feel-good movie."}]}
-(same question) "hmm, no idea, you pick" -> {"moves":[]}
-(a movie was just suggested; whatWeKnow.wish is "A light romantic movie for a date night.") "nope, not that one... got anything funnier?" -> {"moves":[{"type":"reject"},{"type":"wish","text":"A funny, light romantic comedy for a date night."}]}
-(the assistant had asked "want me to drop the horror ban?") "yes, go for it" -> {"moves":[{"type":"retract","slot":"avoidGenres"}]}
-(a movie was just suggested) "ok that sounds great, let's watch it tonight" -> {"moves":[{"type":"accept"}]}`;
+(whatWeKnow.wish is "A light romantic movie for a date night.") "nope, not that one... got anything funnier?" -> {"moves":[{"type":"reject"},{"type":"wish","text":"A funny, light romantic comedy for a date night."}]}
+"ok that sounds great, let's watch it tonight" -> {"moves":[{"type":"accept"}]}
+(whatWeKnow.wish is "A light romantic movie for a date night.") "my girlfriend is really into horses" -> {"moves":[{"type":"wish","text":"A light romantic movie with horses for a date night."}]}`,
+  change: `
+The assistant just offered to drop or loosen something. A "yes" to a question that proposed something other than a movie means that thing: record the move that carries it out.
+(the assistant had asked "want me to drop the horror ban?") "yes, go for it" -> {"moves":[{"type":"retract","slot":"avoidGenres"}]}`,
+  none: "",
+};
+
+/** Puts the user's lost words back into the wish, when the first call left them out. */
+export const repairWishSystem = `A person choosing a movie just said something, and some of their words were lost when it was written down as a wish. Output ONLY a JSON object: {"wish":"<description>"} or {"wish":null}.
+
+"wish" is what they want to watch, as ONE short description of the movie (its story, mood, feel, setting), like a blurb. Start from the given "wish" (if any), keep what still holds, and work in "missingWords" as the person meant them, in their own words. Never put negations in it.
+If nothing in the utterance says what they want to watch (only a question about a movie, small talk, or a reaction), answer {"wish":null}.
+"assistantSaid" is context only: never take words from it.
+
+Examples:
+{"wish":"A gentle animated adventure.","utterance":"something funny with horses","missingWords":["horses"]} -> {"wish":"A funny animated adventure with horses."}
+{"wish":null,"utterance":"something set in the mountains","missingWords":["mountains"]} -> {"wish":"A movie set in the mountains."}
+{"wish":"A cozy romantic comedy.","utterance":"is it long","missingWords":["long"]} -> {"wish":null}`;
 
 /** Jake: decides what to say and which candidate (if any) to suggest. */
 export const respondSystem = `You are Jake, a warm, easygoing friend who knows movies well, talking out loud with someone to help them decide what to watch tonight. Everything you write is spoken aloud: use 1 to 3 short, natural sentences. No lists, no markdown, no emojis, no stage directions.

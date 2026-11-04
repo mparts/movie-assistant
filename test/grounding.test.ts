@@ -2,7 +2,7 @@ import { describe, expect, test, vi } from "vitest";
 import { rules } from "../src/core/rules";
 import { freshIS } from "./fixtures";
 import type { InformationState as IS, LlmClient, Move, Movie } from "../src/core/types";
-import { ground, isAffirmation, repairMoves } from "../src/dialogue/grounding";
+import { ground, isAffirmation, missedWords, repairMoves } from "../src/dialogue/grounding";
 import { understand } from "../src/dialogue/nlu";
 import { respond } from "../src/dialogue/respond";
 
@@ -164,5 +164,44 @@ describe("a negation in the wish", () => {
     ["A story of friendship, not romance.", "A story of friendship.", "romance"],
   ])("a refusal goes to avoid: %s", (text, wish, avoid) => {
     expect(repaired(text)).toEqual([{ type: "wish", text: wish }, { type: "avoid", text: avoid }]);
+  });
+});
+
+describe("a lost wish is noticed", () => {
+  const WISH = "A gentle animated adventure.";
+
+  test("the 3a outputs: no moves at all, or a wish that swapped the user's word for a similar one", () => {
+    expect(missedWords("something funny with animals", [{ type: "wish", text: "A funny animated adventure." }])).toEqual(["animals"]);
+    expect(missedWords("something with dinosaurs", [])).toEqual(["dinosaurs"]);
+    expect(missedWords("how about a movie about friendship", [])).toEqual(["friendship"]);
+    expect(missedWords("something with talking animals would be great", [])).toEqual(["talking", "animals"]);
+    expect(missedWords("something with talking animals would be great", [{ type: "wish", text: `${WISH.slice(0, -1)} with talking animals.` }])).toEqual([]);
+  });
+
+  test("a like for the movie Jake just suggested, dropped by grounding, is logged", async () => {
+    const is = after("Luca", "How about Luca? It's a gentle animated adventure.");
+    is.wish = WISH;
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    expect(await understand(llmSays({ moves: [{ type: "like", title: "Luca" }] }), "the kids love animals", is)).toEqual([]);
+    expect(warn.mock.calls.map((c) => c[0])).toEqual([
+      '[NLU miss] missing: animals in "the kids love animals"',
+      "[NLU miss] dropped like for the suggested movie: Luca",
+    ]);
+    warn.mockRestore();
+  });
+});
+
+describe("a lost wish is repaired", () => {
+  test("the user's word comes back through a second, narrow call", async () => {
+    const is = after(null, "Sounds lovely. Anything in particular the kids enjoy?");
+    is.wish = "A gentle animated adventure.";
+    const json = vi.fn()
+      .mockResolvedValueOnce({ moves: [{ type: "wish", text: "A funny animated adventure." }] })
+      .mockResolvedValueOnce({ wish: "A funny animated adventure with animals." });
+    vi.spyOn(console, "warn").mockImplementationOnce(() => {});
+    expect(await understand({ json } as unknown as LlmClient, "something funny with animals", is)).toEqual([
+      { type: "wish", text: "A funny animated adventure with animals." },
+    ]);
+    expect(json).toHaveBeenCalledTimes(2);
   });
 });

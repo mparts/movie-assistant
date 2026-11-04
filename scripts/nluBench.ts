@@ -8,7 +8,7 @@
 import { initialIS } from "../src/core/state";
 import { parseIntake } from "../src/core/intake";
 import sampleProfile from "../profiles/solo.json";
-import type { InformationState, LlmClient, Move, Movie, Turn } from "../src/core/types";
+import type { InformationState, LlmClient, Move, Movie, Qud, Turn } from "../src/core/types";
 import { understand } from "../src/dialogue/nlu";
 
 export interface BenchCase {
@@ -18,6 +18,8 @@ export interface BenchCase {
   suggested?: string;
   /** Did the assistant's last turn recommend it? Default: yes when `suggested` is set. */
   justSuggested?: boolean;
+  /** What Jake's last turn left open. Default: a suggestion if he just made one, taste if he spoke last, otherwise none. */
+  qud?: Qud;
   /** Edits to the information state before the utterance (what the system already knows). */
   state?: (is: InformationState) => InformationState;
   utterance: string;
@@ -95,6 +97,7 @@ export const cases: BenchCase[] = [
     history: [...realSuggestion, sys("Got it, you want more laughs. Would you be willing to drop the no-comedy restriction?")],
     suggested: "About Time",
     justSuggested: false,
+    qud: "change",
     state: (is) => ({ ...is, genres: ["Romance"], avoidGenres: ["Comedy"] }),
     utterance: "yes please do that!!",
     // Either way the avoided genre is released: a retract, or a plain "wants Comedy" (which removes it from the avoided).
@@ -108,6 +111,7 @@ export const cases: BenchCase[] = [
     name: "real-yes-to-an-alternative",
     history: [...realSuggestion, sys("Looks like none of the picks are big comedies, but we could go with a sweet romance like Past Lives if that works for you.")],
     justSuggested: false,
+    qud: "change",
     state: romcom,
     utterance: "yes it works!!",
     // A yes to Jake's proposal may update the wish or accept; never a negated genre, an avoid, or a liked movie.
@@ -369,11 +373,14 @@ export const cases: BenchCase[] = [
 
 export function stateFor(c: BenchCase): InformationState {
   const base = initialIS(parseIntake(sampleProfile));
+  const justSuggested = !!c.suggested && c.justSuggested !== false;
+  const sysLast = c.history?.[c.history.length - 1]?.speaker === "sys";
   const is: InformationState = {
     ...base,
     history: c.history ?? [],
     recommended: c.suggested ? [stub(c.suggested)] : [],
-    recommendStreak: c.suggested && c.justSuggested !== false ? 1 : 0,
+    recommendStreak: justSuggested ? 1 : 0,
+    qud: c.qud ?? (justSuggested ? "suggestion" : sysLast ? "taste" : "none"),
   };
   return c.state ? c.state(is) : is;
 }
