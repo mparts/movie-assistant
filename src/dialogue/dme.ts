@@ -8,7 +8,7 @@
 import { AnyTransitionConfig, assign, fromPromise, sendTo, setup } from "xstate";
 import { notices, utterances } from "../config/prompts";
 import { applyRanking, rules, withNotice } from "../core/rules";
-import type { DMEContext, DMEEvent, EmbedQuery, InformationState, LlmClient, Move, Reply, SaysMovesEvent } from "../core/types";
+import type { DMEContext, DMEEvent, EmbedQuery, InformationState, LlmClient, Move, Reply, SaysMovesEvent, Understood } from "../core/types";
 import { flushTimings, isDebug, timed, timedSync } from "../core/util";
 import { respond } from "./respond";
 import { understand } from "./nlu";
@@ -54,7 +54,7 @@ const textKey = (text: string) => `q:${text}`;
 const unembedded = (c: DMEContext) => [c.is.wish, ...c.is.avoid].filter((t) => t && !c.vectors.has(textKey(t)));
 
 /** The query side of the ranking, from the cache (anything missing is simply left out). */
-const queryVectors = (c: DMEContext) => ({
+export const queryVectors = (c: DMEContext) => ({
   wish: c.is.wish ? c.vectors.get(textKey(c.is.wish)) : undefined,
   avoid: c.is.avoid.flatMap((t) => c.vectors.get(textKey(t)) ?? []),
 });
@@ -91,6 +91,8 @@ export const dme = setup({
         latest_speaker: v.speaker,
         latest_text: v.text,
         is: { ...context.is, next_moves: [] },
+        // user silence arrives here as a noinput move, not through the NLU
+        ...(v.speaker === "usr" && { understood: { moves: v.moves ?? [], dropped: [] } }),
       };
     }),
   },
@@ -177,7 +179,8 @@ export const dme = setup({
               target: "Integrate",
               actions: [
                 assign(({ context, event }) => ({
-                  latest_moves: event.output as Move[],
+                  latest_moves: (event.output as Understood).moves,
+                  understood: event.output as Understood,
                   is: { ...context.is, next_moves: [] },
                 })),
                 { type: "isu", params: { name: "get_latest_move" } },
@@ -190,6 +193,7 @@ export const dme = setup({
                   console.error("[LLM understand failed]", event.error);
                   return {
                     latest_moves: [] as Move[],
+                    understood: { moves: [], dropped: [] },
                     is: withNotice({ ...context.is, next_moves: [] }, notices.understandFailed),
                   };
                 }),

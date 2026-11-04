@@ -2,17 +2,19 @@
  * Typed chat through the REAL pipeline (LLM + TMDB + dialogue manager), no speech.
  * Run: npm run chat      (DEBUG=1 npm run chat  to dump the information state each rule)
  * It first asks for tonight's settings: one of the files in profiles/ (the same JSON the browser form produces).
- * Commands: /state shows what the assistant has noted about you; /quit exits.
+ * After each reply it prints the turn as one group (moves, state, reply mode, LLM calls, top 5), the same as the
+ * browser's console. Commands: /state prints that group now. /quit exits.
  */
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { createInterface } from "node:readline/promises";
-import { certificationFor, Intake, parseIntake } from "../src/core/intake";
+import { Intake, parseIntake } from "../src/core/intake";
 import { createActor, sendTo, setup } from "xstate";
 import { llmBackends } from "../src/config/services";
 import { settings } from "../src/config/settings";
-import { initialIS, stateSummary } from "../src/core/state";
-import type { DMEContext, Movie, NextMovesEvent } from "../src/core/types";
+import { initialIS } from "../src/core/state";
+import type { DMEContext, NextMovesEvent } from "../src/core/types";
+import { createTurnLog, describePool, describeTonight, logState } from "../src/dialogue/debugView";
 import { dme } from "../src/dialogue/dme";
 import { nlg } from "../src/dialogue/nlg";
 import { createClients } from "../src/services";
@@ -23,11 +25,8 @@ import { createNodePool } from "../src/services/catalogue";
 import { loadEnv } from "./env";
 
 const env = loadEnv();
-const clients = createClients("upstream", env, {
-  // After every LLM call: what it was for, who answered, how long, and who failed first.
-  onLlmAnswer: (a) =>
-    console.log(`  [${a.purpose ?? "LLM"}] ${a.backend} (${a.model}) ${Math.round(a.ms)}ms${a.failed.length ? `, after ${a.failed.join(", ")} failed` : ""}`),
-});
+const turnLog = createTurnLog();
+const clients = createClients("upstream", env, { onLlmAnswer: turnLog.onLlmAnswer });
 const { pool: loadPool } = createNodePool(clients.tmdb, console.log);
 const enabledBackends = llmBackends.filter((b) => b.enabled !== false);
 const order = (prefer?: string | string[]) => orderByPreference(enabledBackends, prefer).map((b) => `${b.name}:${b.model}`).join(" → ");
@@ -61,14 +60,7 @@ async function pickIntake(): Promise<Intake> {
 async function intakeAndPool(): Promise<{ intake: Intake; pool: Pool }> {
   for (;;) {
     const intake = await pickIntake();
-    const { profile, tonight } = intake;
-    const cert = certificationFor(tonight.youngestAge);
-    console.log(
-      `Profile: ${profile.name ?? "Guest"} · ${profile.country} · ${tonight.company}, youngest ${tonight.youngestAge}${cert ? ` → ${cert}` : ""}` +
-        ` · ${tonight.maxMinutes ? `≤${tonight.maxMinutes} min` : "no time limit"}` +
-        ` · ${profile.platforms.length ? `platforms ${profile.platforms.join("|")}` : "any platform"}` +
-        (tonight.avoidGenres.length ? ` · avoid ${tonight.avoidGenres.join(", ")}` : "")
-    );
+    console.log(`Profile: ${describeTonight(intake)}`);
     console.log(T.pool.finding);
     let pool: Pool;
     try {
@@ -77,7 +69,7 @@ async function intakeAndPool(): Promise<{ intake: Intake; pool: Pool }> {
       console.log(T.pool.failed((e as Error).message));
       continue;
     }
-    console.log(`Pool: ${pool.movies.length} movies from ${pool.source === "catalogue" ? "the local catalogue" : "TMDB"} (${pool.embeddedNow} embedded now) in ${(pool.ms / 1000).toFixed(1)}s`);
+    console.log(`Pool: ${describePool(pool)}`);
     const check = poolCheck(pool);
     if (check === "ok") return { intake, pool };
     if (check === "empty") {
@@ -110,6 +102,7 @@ const machine = setup({
     NEXT_MOVES: {
       actions: [
         ({ event }) => {
+          turnLog.turn(dmeContext());
           console.log(`\nassistant> ${nlg(event.value)}   (${Date.now() - turnStart}ms)\n`);
           rl.prompt();
         },
@@ -120,21 +113,14 @@ const machine = setup({
 });
 
 const actor = createActor(machine).start();
-const currentIS = () => (actor.getSnapshot().children.dme as any).getSnapshot().context.is;
+const dmeContext = (): DMEContext => (actor.getSnapshot().children.dme as any).getSnapshot().context;
 
 rl.setPrompt("you> ");
 rl.on("line", (line) => {
   const text = line.trim();
   if (text === "/quit") return process.exit(0);
   if (text === "/state") {
-    const is = currentIS();
-    console.log(
-      JSON.stringify(
-        { ...stateSummary(is), candidates: is.candidates.map((m: Movie) => m.title), suggested: is.recommended.map((m: Movie) => m.title) },
-        null,
-        2
-      )
-    );
+    logState(dmeContext());
     return rl.prompt();
   }
   turnStart = Date.now();

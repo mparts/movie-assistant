@@ -19,6 +19,19 @@ const facts = (m: Movie, descriptionChars: number) => ({
   description: m.overview.slice(0, descriptionChars),
 });
 
+/**
+ * How Elisa replies to this state, and why: wrap-up once a suggestion was accepted, recommend once there is taste and
+ * the user has spoken `minUserTurns` times (silence does not count), explore before that.
+ */
+export function replyMode(is: InformationState): { mode: Mode; accepted?: Movie; why: string } {
+  const userTurns = is.history.filter((t) => t.speaker === "usr" && t.text !== d.silenceMarker).length;
+  const accepted = is.accepted === undefined ? undefined : is.recommended.find((m) => m.id === is.accepted);
+  if (accepted) return { mode: "wrapup", accepted, why: `accepted ${accepted.title}` };
+  const taste = hasTaste(is);
+  const mode: Mode = taste && userTurns >= d.minUserTurns ? "recommend" : "explore";
+  return { mode, why: `taste ${taste ? "yes" : "no"}, user turns ${userTurns} of ${d.minUserTurns}` };
+}
+
 /** One LLM call: conversation + state + real TMDB candidates → what to say (and which candidate, if any). */
 export async function respond(llm: LlmClient, is: InformationState): Promise<Reply> {
   // Scripted turns: no LLM needed.
@@ -26,10 +39,7 @@ export async function respond(llm: LlmClient, is: InformationState): Promise<Rep
   const lastUser = [...is.history].reverse().find((t) => t.speaker === "usr");
   if (lastUser?.text === d.silenceMarker) return { say: utterances.noInput };
 
-  // Elisa suggests once there is some taste and the user has spoken `minUserTurns` times, so a few questions came first.
-  const userTurns = is.history.filter((t) => t.speaker === "usr" && t.text !== d.silenceMarker).length;
-  const accepted = is.accepted === undefined ? undefined : is.recommended.find((m) => m.id === is.accepted);
-  const mode: Mode = accepted ? "wrapup" : hasTaste(is) && userTurns >= d.minUserTurns ? "recommend" : "explore";
+  const { mode, accepted } = replyMode(is);
   // Candidates are withheld unless we're in recommend mode: the LLM cannot pick one early.
   const pool = mode === "recommend" ? is.candidates.slice(0, d.candidatesShown) : [];
 

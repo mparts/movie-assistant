@@ -1,7 +1,7 @@
 import { understandByQud, understandCore } from "../config/prompts";
 import { settings } from "../config/settings";
 import { lastSuggested, stateSummary } from "../core/state";
-import type { InformationState, LlmClient, Move } from "../core/types";
+import type { InformationState, LlmClient, Move, Understood } from "../core/types";
 import { isDebug, namesTitle } from "../core/util";
 import { ground, isAffirmation, repairMoves } from "./grounding";
 
@@ -30,15 +30,15 @@ function clean(m: any): Move | null {
   }
 }
 
-/** One LLM call: utterance (+ short history and known state) → moves. */
-export async function understand(llm: LlmClient, text: string, is: InformationState): Promise<Move[]> {
+/** One LLM call: utterance (+ short history and known state) → moves, and the moves grounding dropped. */
+export async function understand(llm: LlmClient, text: string, is: InformationState): Promise<Understood> {
   const suggested = lastSuggested(is);
   const lastTurn = is.history[is.history.length - 1];
   const lastSystem = lastTurn?.speaker === "sys" ? lastTurn.text : undefined;
   // A bare "yes" / "let's go with that" right after Elisa named the suggestion is taking it: no LLM needed (and none
   // gets it wrong). After any other turn of Elisa's (an answer, or "want something lighter?") the LLM decides.
   if (suggested && is.qud === "suggestion" && lastSystem && namesTitle(lastSystem, suggested) && isAffirmation(text))
-    return [{ type: "accept" }];
+    return { moves: [{ type: "accept" }], dropped: [] };
 
   const out: any = await llm.json(
     [
@@ -57,6 +57,7 @@ export async function understand(llm: LlmClient, text: string, is: InformationSt
   );
   const raw: unknown[] = Array.isArray(out?.moves) ? out.moves : [];
   if (isDebug()) console.log(`[NLU raw] ${JSON.stringify(raw)}`);
-  const moves = repairMoves(raw.map(clean).filter((m): m is Move => m !== null), is.wish, raw);
-  return ground(moves, text, lastSystem, suggested, is.wish);
+  const repaired = repairMoves(raw.map(clean).filter((m): m is Move => m !== null), is.wish, raw);
+  const moves = ground(repaired, text, lastSystem, suggested, is.wish);
+  return { moves, dropped: repaired.filter((m) => !moves.includes(m)) };
 }

@@ -29,7 +29,7 @@ describe("A: a bare yes after a suggestion is an accept, without the LLM", () =>
 
   test("right after a suggestion it returns accept and never calls the model", async () => {
     const llm = llmSays({ moves: [] });
-    expect(await understand(llm, "yes this one", after("About Time", "How about About Time?"))).toEqual([{ type: "accept" }]);
+    expect(await understand(llm, "yes this one", after("About Time", "How about About Time?"))).toEqual({ moves: [{ type: "accept" }], dropped: [] });
     expect(llm.json).not.toHaveBeenCalled();
   });
 

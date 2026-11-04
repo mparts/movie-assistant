@@ -58,6 +58,9 @@ export type Move =
 
 export type MoveOf<T extends Move["type"]> = Extract<Move, { type: T }>;
 
+/** What the NLU made of one user turn: the moves kept, and the ones grounding dropped. */
+export type Understood = { moves: Move[]; dropped: Move[] };
+
 /** How Elisa was told to reply this turn (prompts.ts `respondModes`). */
 export type NlgMode = "explore" | "recommend" | "wrapup";
 
@@ -159,6 +162,8 @@ export interface DMEContext extends TotalInformationState {
   pool: Pool;
   /** Query vectors by text. Outside the IS: not plain JSON. */
   vectors: Map<string, Float32Array>;
+  /** The last user turn as the NLU understood it, for the debug view. */
+  understood?: Understood;
 }
 
 /** Browser top level. `is` exists once the settings form is done; `elisaSaid` is Elisa's last line, shown on screen. */
@@ -172,6 +177,8 @@ export interface DMContext {
   /** Why loading tonight's movies failed, shown on the pool-check screen. */
   poolError?: string;
   lastUtterance?: string;
+  /** The recogniser's confidence in `lastUtterance`. */
+  confidence?: number;
   elisaSaid?: string;
 }
 

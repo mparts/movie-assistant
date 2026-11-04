@@ -336,7 +336,7 @@ export interface CaseResult {
 export async function runCase(llm: LlmClient, c: BenchCase): Promise<CaseResult> {
   const t0 = performance.now();
   try {
-    const moves = await understand(llm, c.utterance, stateFor(c));
+    const { moves } = await understand(llm, c.utterance, stateFor(c));
     const ms = performance.now() - t0;
     const why = c.check(moves);
     return { name: c.name, status: why ? "wrong" : "ok", ms, moves, why: why ?? undefined };

@@ -10,13 +10,15 @@ import { settings } from "../config/settings";
 import type { Intake } from "../core/intake";
 import { poolCheck, type Pool } from "../core/pool";
 import { initialIS } from "../core/state";
-import type { DMContext, DMEvent, NextMovesEvent } from "../core/types";
+import type { DMContext, DMEContext, DMEvent, NextMovesEvent } from "../core/types";
 import { createClients } from "../services";
 import { fetchPool } from "../services/poolVectorsClient";
+import { createTurnLog, describePool, describeTonight, logState } from "../dialogue/debugView";
 import { dme } from "../dialogue/dme";
 import { nlg } from "../dialogue/nlg";
 
-const clients = createClients("proxy");
+const turnLog = createTurnLog();
+const clients = createClients("proxy", {}, { onLlmAnswer: turnLog.onLlmAnswer });
 
 const speechSettings: Settings = {
   azureCredentials: { endpoint: azure.tokenEndpoint, key: import.meta.env.VITE_AZURE_KEY },
@@ -83,6 +85,7 @@ const dmMachine = setup({
       },
     },
     Main: {
+      entry: ({ context }) => console.log(`[Elisa] ${describeTonight(context.is!.intake)} · pool: ${describePool(context.pool!)}`),
       // Leaving Main stops the DME. Speech is not stopped (speechstate cannot restart after STOP): the form waits
       // until speech is idle before it lets a new conversation start.
       on: { CHANGE_SETTINGS: "Intake" },
@@ -92,7 +95,12 @@ const dmMachine = setup({
           initial: "Idle",
           states: {
             Idle: {
-              on: { SPEAK_COMPLETE: { target: "Recognising", actions: [assign({ lastUtterance: () => "" }), "listen"] } },
+              on: {
+                SPEAK_COMPLETE: {
+                  target: "Recognising",
+                  actions: [assign({ lastUtterance: () => "", confidence: () => undefined }), "listen"],
+                },
+              },
             },
             Recognising: {
               on: {
@@ -106,8 +114,10 @@ const dmMachine = setup({
                       : { speaker: "usr", moves: [{ type: "noinput" }] },
                   })),
                 },
-                RECOGNISED: { actions: assign(({ event }) => ({ lastUtterance: event.value[0].utterance })) },
-                ASR_NOINPUT: { actions: assign({ lastUtterance: () => "" }) },
+                RECOGNISED: {
+                  actions: assign(({ event }) => ({ lastUtterance: event.value[0].utterance, confidence: event.value[0].confidence })),
+                },
+                ASR_NOINPUT: { actions: assign({ lastUtterance: () => "", confidence: () => undefined }) },
               },
             },
           },
@@ -120,6 +130,7 @@ const dmMachine = setup({
                 NEXT_MOVES: {
                   target: "Speaking",
                   actions: [
+                    ({ context }) => turnLog.turn(dmeContext()!, context.confidence),
                     assign(({ event }) => ({ elisaSaid: nlg((event as NextMovesEvent).value) })),
                     sendTo("dmeID", ({ event }) => ({ type: "SAYS", value: { speaker: "sys", moves: event.value } })),
                   ],
@@ -150,6 +161,20 @@ const dmMachine = setup({
 });
 
 export const dmActor = createActor(dmMachine).start();
+
+/** The dialogue manager's context while a conversation runs. */
+function dmeContext(): DMEContext | undefined {
+  return (dmActor.getSnapshot().children as any).dmeID?.getSnapshot().context;
+}
+
+/** `elisa.state()` in the F12 console: the same view as each turn's group, now. */
+(globalThis as any).elisa = {
+  state: () => {
+    const c = dmeContext();
+    if (c) logState(c);
+    else console.log("No conversation yet.");
+  },
+};
 
 /** speechstate's own view of itself: "not-ready", "idle", "speaking", "recognising", ... */
 export const speechView = (): string =>

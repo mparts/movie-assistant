@@ -18,13 +18,23 @@ export function orderByPreference<T extends { name: string }>(list: T[], prefer?
   return [...list].sort((a, b) => rank(a) - rank(b)); // the sort is stable
 }
 
-/** Reported after every successful call: who answered, how long it took, and which backends failed first. */
+/** Reported after every successful call: who answered, how long it took, and which backends failed first and why. */
 export interface LlmAnswer {
   purpose?: string;
   backend: string;
   model: string;
   ms: number;
+  /** "groq 429", "ollama timeout": each backend that failed before this one. */
   failed: string[];
+}
+
+/** A few words on why a backend failed. */
+function whyFailed(e: unknown): string {
+  if (!(e instanceof Error)) return "error";
+  if (e.name === "AbortError") return "timeout";
+  if (e.name === "SyntaxError") return "bad JSON";
+  if (e.name === "TypeError") return "unreachable";
+  return e.message.match(/HTTP (\d+)/)?.[1] ?? "error";
 }
 
 /** Tries the backends in order (`opts.prefer` goes first); the first that answers wins. */
@@ -42,7 +52,7 @@ export function createLlm(backends: LlmBackend[], onAnswer?: (a: LlmAnswer) => v
           return out;
         } catch (e) {
           console.warn(`[LLM ${b.name} failed]`, e);
-          failed.push(b.name);
+          failed.push(`${b.name} ${whyFailed(e)}`);
           lastError = e;
         }
       }
