@@ -11,7 +11,7 @@ export interface LlmBackend {
   extraBody?: Record<string, unknown>;
 }
 
-/** The preferred names first, in the order given; everything else after them in its original order. */
+/** The preferred names first, in the order given, and everything else after them in its original order. */
 export function orderByPreference<T extends { name: string }>(list: T[], prefer?: string | string[]): T[] {
   const names = prefer === undefined ? [] : [prefer].flat();
   const rank = (b: T) => (names.includes(b.name) ? names.indexOf(b.name) : names.length);
@@ -37,7 +37,7 @@ function whyFailed(e: unknown): string {
   return e.message.match(/HTTP (\d+)/)?.[1] ?? "error";
 }
 
-/** Tries the backends in order (`opts.prefer` goes first); the first that answers wins. */
+/** Tries the backends in order (`opts.prefer` goes first). The first that answers wins. */
 export function createLlm(backends: LlmBackend[], onAnswer?: (a: LlmAnswer) => void): LlmClient {
   return {
     async json(messages, opts) {

@@ -1,8 +1,8 @@
 /**
  * Embeds the movie catalogue ahead of time: every TMDB movie with at least `catalogue.minVotes` votes and at least
- * `intake.minMinutes` minutes, so any Phase 1 pool is (nearly) all embedded already. Saves a record (with runtime, directors
- * and cast), keywords and a vector per movie in `.cache/`. Run again to top up: only new movies get details fetched, and only new or changed
- * texts get embedded. No LLM calls.
+ * `intake.minMinutes` minutes, so any Phase 1 pool is (nearly) all embedded already. Saves a record (with runtime,
+ * directors and cast), keywords and a vector per movie in `.cache/`. Run again to top up: only new movies get details
+ * fetched, and only new or changed texts get embedded. No LLM calls.
  *
  *   npm run embed-catalogue
  */

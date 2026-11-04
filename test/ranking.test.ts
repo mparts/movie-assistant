@@ -12,7 +12,7 @@ function pool(entries: [Movie, number[]][]): Pool {
 const ids = (p: Pool, is = freshIS(), q = {}) => rankPool(is, p, { avoid: [], ...q }).map((s) => s.movie.id);
 
 describe("rankPool", () => {
-  // 1 is closest to the wish; 2 is a near twin of 1; 3 is somewhat close; 4 is far.
+  // 1 is closest to the wish, 2 is a near twin of 1, 3 is somewhat close and 4 is far.
   const p = pool([
     [movie(1), [1, 0, 0]],
     [movie(2), [0.99, 0.14, 0]],

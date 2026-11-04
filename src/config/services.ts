@@ -1,6 +1,6 @@
 /**
  * Everything about OUTSIDE services lives here: URLs, models, timeouts, and the NAMES of the secrets.
- * The secrets themselves live only in .env.local (see .env.example).
+ * The secrets themselves live only in .env.local.
  *
  * Every HTTP service has an `upstream` (the real URL, used directly by Node scripts) and a `proxy`
  * prefix (used by the browser: the Vite dev server forwards it to `upstream` and adds the secret,
@@ -9,7 +9,7 @@
 interface HttpService {
   upstream: string;
   proxy: string;
-  /** Name of the .env.local variable holding the bearer token; omit for open servers. */
+  /** Name of the .env.local variable holding the bearer token. Omit it for open servers. */
   secret?: string;
 }
 
@@ -39,19 +39,20 @@ export interface LlmBackendConfig {
   enabled?: boolean;
 }
 
-/** In fallback order: the first enabled backend answers; the next ones are tried if it fails. */
+/** In fallback order. The first enabled backend answers, and the next ones are tried if it fails. */
 export const llmBackends: LlmBackendConfig[] = [
   {
     name: "groq",
     service: "groq",
     model: "openai/gpt-oss-120b",
     timeoutMs: 20_000,
-    extraBody: { reasoning_effort: "low" }, // gpt-oss "thinks" first; keep it short, this is a spoken conversation
+    extraBody: { reasoning_effort: "low" }, // gpt-oss reasons before it answers. Keep that short for spoken replies
   },
   { name: "ollama", service: "universityOllama", model: "llama3.1:latest", timeoutMs: 60_000 },
   /**
    * Model on this machine, the last resort for every call. Of the models tried, qwen2.5:7b-instruct was the most
-   * accurate for NLU (14/15 on `npm run nlu-bench`); it runs about a quarter on CPU on the 6 GB GPU (~0.7 s per NLU call).
+   * accurate for NLU (14/15 on `npm run nlu-bench`). About a quarter of it runs on CPU beside the 6 GB GPU
+   * (~0.7 s per NLU call).
    * Replies from it are weaker than Groq's. Set `enabled: false` to drop it (the bench can still use it by name).
    */
   { name: "local", service: "localLlm", model: "qwen2.5:7b-instruct", timeoutMs: 60_000 },
@@ -61,7 +62,7 @@ export const llmBackends: LlmBackendConfig[] = [
 export const embeddings = {
   service: "localOllama" as ServiceName,
   path: "/embed",
-  /** Chosen in the spike (todo.md): by far the strongest raw similarity of the models tried. 2,560 dims. */
+  /** By far the strongest raw similarity of the embedding models tried. 2,560 dims. */
   model: "qwen3-embedding:4b",
   /** qwen3-embedding wants an instruction on the query side only. */
   queryPrefix: "Instruct: Given a description of a movie someone wants to watch, retrieve movies that match it\nQuery: ",

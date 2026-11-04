@@ -9,7 +9,7 @@ import { certificationFor, GENRES, parseIntake, type Company, type Intake } from
 type Screen = "name" | "welcome" | "profile" | "tonight";
 type Provider = { id: number; name: string; logo?: string };
 type Load<T> = { state: "loading" } | { state: "ok"; value: T } | { state: "failed" };
-/* Each list is fetched once; a failed one is retried only when the profile screen is opened again (never in a loop). */
+/* Each list is fetched once. A failed one is retried only when the profile screen is opened again (never in a loop). */
 
 /** What the form holds while it is being filled in. */
 interface Draft {
@@ -85,7 +85,7 @@ function save(intake: Intake) {
   }
 }
 
-/* ---- TMDB lists, through the dev-server proxy. Cached; a failure can be retried by reopening the screen. ---- */
+/* ---- TMDB lists, through the dev-server proxy. Cached, and a failure can be retried by reopening the screen. ---- */
 
 async function tmdbGet(path: string, params: Record<string, string>): Promise<any> {
   const res = await fetch(`${services.tmdb.proxy}${path}?${new URLSearchParams(params)}`);
@@ -147,7 +147,7 @@ interface IntakeForm {
 
 /**
  * `blocked()` says why a conversation cannot start yet (speech not ready, still talking), or null when it can.
- * `onDone` gets the checked Intake; the form has already saved it (unless guest).
+ * `onDone` gets the checked Intake, which the form has already saved (unless guest).
  */
 export function createIntakeForm(root: HTMLElement, opts: { onDone(intake: Intake): void; blocked(): string | null }): IntakeForm {
   let screen: Screen = "name";

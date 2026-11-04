@@ -12,7 +12,10 @@ export type Company = "alone" | "relationship" | "family" | "friends";
 const COMPANIES: Company[] = ["alone", "relationship", "family", "friends"];
 
 export interface Intake {
-  /** `name` absent = Guest (nothing is saved). `platforms`: TMDB watch-provider ids; empty = "I don't stream", no platform filter. */
+  /**
+   * No `name` means Guest (nothing is saved). `platforms` are TMDB watch-provider ids, and empty means "I don't stream"
+   * (no platform filter).
+   */
   profile: { name?: string; age: number; country: string; platforms: number[] };
   /** `youngestAge` is always set after parsing: for alone and relationship it is the user's own age. */
   tonight: { maxMinutes?: number; avoidGenres: string[]; company: Company; youngestAge: number };
@@ -40,7 +43,7 @@ export function parseIntake(raw: unknown): Intake {
     ? t.maxMinutes : fail("maxMinutes");
   const avoidGenres = Array.isArray(t.avoidGenres ?? []) && (t.avoidGenres ?? []).every((g: unknown) => GENRES.includes(g as string))
     ? [...(t.avoidGenres ?? [])] : fail("avoidGenres");
-  // Asked only for family and friends; otherwise the user's own age.
+  // Asked only for family and friends. Otherwise it is the user's own age.
   const shared = company === "family" || company === "friends";
   const youngestAge = shared && t.youngestAge !== undefined ? (isAge(t.youngestAge) ? t.youngestAge : fail("youngestAge")) : age;
 

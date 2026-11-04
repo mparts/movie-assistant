@@ -47,7 +47,7 @@ export function featuresPerson(movie: Movie, name: string): boolean {
 
 /* ---- filters ---- */
 
-/** Movies that may be suggested: not suggested, seen or turned down already; inside every filter. */
+/** Movies that may still be suggested: not suggested, seen or turned down already, and without an avoided person. */
 function eligible(is: IS, movies: Movie[]): Movie[] {
   const out = new Set([...is.recommended.map((m) => m.id), ...is.rejected.map((r) => r.id)]);
   const unwanted = is.people.filter((p) => p.negated);

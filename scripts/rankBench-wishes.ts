@@ -1,9 +1,9 @@
 /**
- * Labelled wishes for `npm run rank-bench` (first written for the step 5 spike). `said`: the user's own words. `wish`:
+ * Labelled wishes for `npm run rank-bench`. `said`: the user's own words. `wish`:
  * the same, rewritten as a movie description (what the NLU keeps). `avoid`: things to avoid, kept out of the wish.
  * `good`: titles that should reach the top 10 ("Robin Hood (1973)" pins a version). `bad` / `badKeywords`: titles or
- * TMDB keywords that must not. Family labels were written before the spike's round 3; adult labels were picked from a
- * genre-and-votes list, not from rankings.
+ * TMDB keywords that must not. The labels were chosen by hand, not from the ranking's output. Adult labels were picked
+ * from a genre-and-votes list.
  */
 export type Wish = {
   name: string;

@@ -39,7 +39,7 @@ describe("guards on the LLM", () => {
   });
 
   test("a candidate named without its id still counts as the suggestion", async () => {
-    // Found in a spoken browser run: the suggestion was never recorded, so "yeah this works" could not accept it.
+    // Without the id the suggestion is never recorded, so "yeah this works" could not accept it.
     const is = early();
     while (is.history.filter((t) => t.speaker === "usr").length < settings.dialogue.minUserTurns)
       is.history.push({ speaker: "sys", text: "Fun or epic?" }, { speaker: "usr", text: "epic" });

@@ -1,7 +1,7 @@
 /**
  * The console view of a conversation, the same in the browser (F12) and the typed chat: one line for tonight's
  * settings and pool, one group per turn, and the same group on demand (`elisa.state()`, `/state`).
- * The full information state is printed only with `DME_DEBUG` / `DEBUG=1` (dme.ts).
+ * The full information state is printed only with `DME_DEBUG` / `DEBUG=1`.
  */
 import { certificationFor, type Intake } from "../core/intake";
 import type { Pool } from "../core/pool";

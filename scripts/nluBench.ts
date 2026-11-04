@@ -1,6 +1,5 @@
 /**
  * NLU benchmark: cases, scoring and timing. No I/O of its own, so it is testable with a stub LlmClient.
- * The CLI is scripts/nlu-bench.ts.
  *
  * Each case is a state + utterance + a check on the cleaned moves. Checks are deliberately loose
  * (any reasonable reading passes) so a model fails for being wrong, not for being worded differently.
@@ -34,7 +33,7 @@ const stub = (title: string): Movie => ({ id: 1, title, genres: [], rating: 7, v
 const of = <T extends Move["type"]>(moves: Move[], type: T) =>
   moves.filter((m): m is Extract<Move, { type: T }> => m.type === type);
 const expect = (ok: boolean, why: string) => (ok ? null : why);
-/** The first part of the chat in chat.log that broke the app ("real-*" cases below). */
+/** The opening of a real chat that broke the app ("real-*" cases below). */
 const realHistory: Turn[] = [
   sys("Hey! I'm Elisa, your movie companion. How are you feeling today?"),
   usr("hey I am alright, how are you?"),
@@ -99,7 +98,7 @@ export const cases: BenchCase[] = [
     justSuggested: false,
     state: romcom,
     utterance: "yes it works!!",
-    // A yes to Elisa's proposal may update the wish or accept; never an avoid.
+    // A yes to Elisa's proposal may update the wish or accept, but never adds an avoid.
     check: (m) =>
       expect(
         !of(m, "avoid").length,
@@ -232,7 +231,7 @@ export const cases: BenchCase[] = [
     check: (m) => expect(of(m, "person").some((p) => /nolan/i.test(p.name) && !p.negated), "no wanted Nolan"),
   },
   {
-    // From a smoke test: a year request became the wish "A movie from the last few years."
+    // A year request must not become the wish "A movie from the last few years."
     name: "year-records-nothing",
     history: [sys("A light romcom, nice. Anything else that matters tonight?")],
     state: romcom,
@@ -260,7 +259,7 @@ export const cases: BenchCase[] = [
     check: (m) => expect(of(m, "reject").length === 1, "no 'reject' move"),
   },
   {
-    // From a live chat: with a person in the same sentence, the liked movie was dropped. A liked movie goes in the wish.
+    // A liked movie goes in the wish, even with a person in the same sentence.
     name: "like-next-to-a-person",
     history: [sys("Sounds like you want something that'll twist your brain a bit. More cerebral puzzles or flashy action?")],
     state: (is) => ({ ...is, wish: "A mind-bending sci-fi movie." }),

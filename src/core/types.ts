@@ -2,7 +2,7 @@ import { SpeechStateExternalEvent } from "speechstate";
 import type { Intake } from "./intake";
 import type { Pool } from "./pool";
 
-/** A movie as the dialogue sees it. Genres are TMDB genre *names*; only the TMDB client knows ids. */
+/** A movie as the dialogue sees it. Genres are TMDB genre *names*. Only the TMDB client knows their ids. */
 export interface Movie {
   id: number;
   title: string;
@@ -20,7 +20,7 @@ export interface Movie {
   cast?: string[];
   collection?: string;
   tagline?: string;
-  /** US rating ("PG-13"); "" when TMDB has none. Lets the pool be filtered locally. */
+  /** US rating ("PG-13"), or "" when TMDB has none. Lets the pool be filtered locally. */
   certification?: string;
 }
 
@@ -44,7 +44,7 @@ export type Turn = { speaker: Speaker; text: string };
  * The LLM never edits the information state directly: rules do, from these moves.
  */
 export type Move =
-  /** The WHOLE updated wish, as a short description of the movie they want; never contains negations. */
+  /** The WHOLE updated wish, as a short description of the movie they want. It never contains negations. */
   | { type: "wish"; text: string }
   /** Something they don't want ("horror", "princesses", "anything too sad"). */
   | { type: "avoid"; text: string }
@@ -61,7 +61,7 @@ export type MoveOf<T extends Move["type"]> = Extract<Move, { type: T }>;
 /** What the NLU made of one user turn: the moves kept, and the ones grounding dropped. */
 export type Understood = { moves: Move[]; dropped: Move[] };
 
-/** How Elisa was told to reply this turn (prompts.ts `respondModes`). */
+/** How Elisa was told to reply this turn. */
 export type NlgMode = "explore" | "recommend" | "discuss" | "wrapup";
 
 /** What Elisa's last turn left open: a taste question, the movie Elisa suggested, or nothing. */
@@ -80,7 +80,7 @@ type Range = { min?: number; max?: number };
 export interface InformationState {
   next_moves: Move[];
   private: {
-    /** things that happened behind the scenes this turn, for the LLM to mention if relevant */
+    /** Things that happened behind the scenes this turn, for the LLM to mention if relevant. */
     notices: string[];
   };
   shared: { lu?: { speaker: Speaker; moves: Move[] } };
@@ -95,14 +95,14 @@ export interface InformationState {
 
   /** The best-ranked movies of the pool right now (the LLM sees these), best first. */
   candidates: Movie[];
-  recommended: Movie[]; // in order shown; last = focus
-  /** "no" = turned down (similar movies sink); "seen" = already watched (only removed). */
+  recommended: Movie[]; // in the order shown, the last one is in focus
+  /** "no" means turned down (similar movies sink), "seen" means already watched (only removed). */
   rejected: { id: number; reason: "seen" | "no" }[];
   /** What Elisa's last turn left open. */
   qud: Qud;
   /** Id of the suggested movie the user accepted. Cleared when they say anything substantive afterwards. */
   accepted?: number;
-  /** Phase 1 facts, set once at the start; no move changes them. */
+  /** Phase 1 facts, set once at the start. No move changes them. */
   intake: Intake;
 }
 
@@ -113,7 +113,7 @@ export interface SearchCriteria {
   year: Range;
   /** US certification ceiling ("PG"), from the youngest viewer. */
   certificationLte?: string;
-  /** Subscription platforms (TMDB provider ids) in `region`; any of them will do. */
+  /** Subscription platforms (TMDB provider ids) in `region`. Any of them will do. */
   watch?: { region: string; providers: number[] };
 }
 
@@ -129,14 +129,14 @@ export type ChatMessage = { role: "system" | "user" | "assistant"; content: stri
 export interface LlmOptions {
   temperature?: number;
   maxTokens?: number;
-  /** Backend name(s) to try first, in this order; the others follow in their configured order as fallbacks. */
+  /** Backend name(s) to try first, in this order. The others follow in their configured order as fallbacks. */
   prefer?: string | string[];
   /** What the call is for ("NLU", "NLG"): shown when reporting which backend answered. */
   purpose?: string;
 }
 
 export interface LlmClient {
-  /** One chat completion that must return a JSON object; rejects on failure. */
+  /** One chat completion that must return a JSON object. Rejects on failure. */
   json(messages: ChatMessage[], opts?: LlmOptions): Promise<unknown>;
 }
 
@@ -165,7 +165,7 @@ export interface DMEContext extends TotalInformationState {
   understood?: Understood;
 }
 
-/** Browser top level. `is` exists once the settings form is done; `elisaSaid` is Elisa's last line, shown on screen. */
+/** Browser top level. `is` exists once the settings form is done. `elisaSaid` is Elisa's last line, shown on screen. */
 export interface DMContext {
   ssRef: any;
   embedQuery: EmbedQuery;
@@ -191,7 +191,7 @@ export type DMEvent =
   | SpeechStateExternalEvent
   | NextMovesEvent;
 
-/** User speech arrives as raw `text` (the DME asks the LLM to understand it); silence as a noinput move. */
+/** User speech arrives as raw `text` (the DME asks the LLM to understand it), and silence as a noinput move. */
 export type SaysMovesEvent = {
   type: "SAYS";
   value: { speaker: Speaker; moves?: Move[]; text?: string };

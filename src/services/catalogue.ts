@@ -2,7 +2,7 @@
  * The local copy of the movie catalogue (Node only): a record, keywords and a vector per movie, in `.cache/`.
  * `ensureVectors` is the one place that turns movies into vectors: from the copy when it has them, otherwise by
  * fetching details and embedding on the spot (then saved). `createNodePool` loads tonight's pool, from the copy when
- * it can (see there). Used by `embed-catalogue`, the typed chat and the dev server (for the browser).
+ * it can. Used by `embed-catalogue`, the typed chat and the dev server (for the browser).
  */
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
@@ -58,7 +58,7 @@ const needsDetails = (m: Movie | undefined) => !m || !Array.isArray(m.cast) || m
 
 /**
  * The catalogue's copy of every movie that has an overview, with its vector (movies without one are left out).
- * Fresh TMDB fields (votes, rating) win over the stored ones; details (runtime, credits) come from the copy.
+ * Fresh TMDB fields (votes, rating) win over the stored ones, and details (runtime, credits) come from the copy.
  * New movies get details, keywords and a vector, saved to disk.
  */
 export async function ensureVectors(
@@ -154,8 +154,9 @@ const fitsRuntime = (m: Movie, { runtime }: SearchCriteria) =>
   m.runtime !== undefined && m.runtime >= (runtime.min ?? 0) && (runtime.max === undefined || m.runtime <= runtime.max);
 
 /**
- * The pool from the local copy, or undefined when the copy cannot answer: platforms (they change weekly; only TMDB
- * knows), or filters wider than what the catalogue walked (fewer votes, shorter movies).
+ * The pool from the local copy, or undefined when the copy cannot answer. That is when platforms are chosen (they
+ * change weekly and only TMDB knows them), or when the filters are wider than what the catalogue walked (fewer votes,
+ * shorter movies).
  */
 export function localPool(c: Catalogue, criteria: SearchCriteria, minVotes: number): Movie[] | undefined {
   const cov = c.coverage;
@@ -211,7 +212,7 @@ export function createNodePool(tmdb: TmdbClient, log: (line: string) => void = (
   return { pool, catalogue: opened };
 }
 
-/** Node-only helpers shared by the on-disk caches. Kept out of `index.ts` so the browser bundle never imports `node:fs`. */
+/** Node-only helpers shared by the on-disk caches. They live here so the browser bundle never imports `node:fs`. */
 
 /** The parsed JSON file, or `undefined` if it is missing, unreadable, or not valid JSON. */
 export function readJson(path: string): unknown {
@@ -238,7 +239,7 @@ export function writeJsonAtomic(path: string, data: unknown, what: string): void
  * Movie vectors embedded ahead of time (`npm run embed-catalogue`), one pair of files per embedding model:
  *   `<base>.bin`  the vectors, Float32 rows back to back, in index order
  *   `<base>.json` the index: `{ model, dims, ids, hashes }` (hash of the embedded text, to notice changed texts)
- * Node only. Loaded whole into memory; saved whole, through temp files + rename. A missing, corrupt or other-model
+ * Node only. Loaded whole into memory, and saved whole through temp files + rename. A missing, corrupt or other-model
  * pair counts as empty.
  */
 
@@ -267,7 +268,7 @@ export function loadVectorStore(base: string, model: string): VectorStore {
       const ids = index.ids as number[];
       const buf = readFileSync(`${base}.bin`);
       if (index.hashes.length === ids.length && buf.byteLength >= ids.length * d * 4) {
-        // Float32Array needs a 4-byte-aligned offset; small Buffers can come from a shared pool at any offset.
+        // Float32Array needs a 4-byte-aligned offset, but small Buffers can come from a shared pool at any offset.
         const bytes = buf.byteOffset % 4 ? new Uint8Array(buf) : buf;
         const all = new Float32Array(bytes.buffer, bytes.byteOffset, ids.length * d);
         ids.forEach((id, i) => rows.set(id, { hash: String((index.hashes as unknown[])[i]), vec: all.subarray(i * d, (i + 1) * d) }));

@@ -88,7 +88,7 @@ describe("moves the user's words do not support are dropped", () => {
 });
 
 describe("a negation in the wish", () => {
-  // Found by replaying lost wishes: any negation dropped the whole wish, and a mid-sentence one was cut in the wrong place.
+  // A negation must not drop the whole wish, and a mid-sentence one must be cut in the right place.
   const old = "A gentle animated adventure.";
   const repaired = (text: string) => ground(repairMoves([{ type: "wish", text }], old, []), "x", undefined, null, old);
   test.each([

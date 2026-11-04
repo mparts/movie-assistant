@@ -6,7 +6,7 @@
  *   npm run nlu-bench -- --backend local                          (a backend from llmBackends, even a disabled one)
  *
  * Options: --model <name> (repeatable), --url <OpenAI-compatible base URL> (default: local Ollama /v1),
- *          --backend <name> (repeatable; resolved exactly like production does), --verbose (show failing moves).
+ *          --backend <name> (repeatable, resolved exactly like production does), --verbose (show failing moves).
  * Never calls Groq: remote hosts other than localhost are refused, so a typo cannot spend the daily limit.
  */
 import { llmBackends } from "../src/config/services";

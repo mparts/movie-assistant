@@ -1,6 +1,5 @@
 /**
  * Everything tunable about the assistant's BEHAVIOUR. Change a number here, get different results.
- * (Outside services: services.ts. Words the assistant says: prompts.ts.)
  */
 export const settings = {
   dialogue: {
@@ -39,8 +38,8 @@ export const settings = {
     defaults: { temperature: 0, maxTokens: 800 },
     /**
      * Understanding is structured extraction: deterministic, and fine on a 7-8B model. University first, because the
-     * local GPU is taken by the embedding model (qwen3-embedding:4b does not fit beside qwen2.5:7b); Groq next; the
-     * local model (not in this list) stays last, as a last resort.
+     * local GPU is taken by the embedding model (qwen3-embedding:4b does not fit beside qwen2.5:7b). Groq comes next,
+     * and the local model (not in this list) stays last, as a last resort.
      */
     understand: { temperature: 0, maxTokens: 800, purpose: "NLU", prefer: ["ollama", "groq"] as string[] | undefined },
     /**
@@ -67,13 +66,16 @@ export const settings = {
     keywordsPath: ".cache/keywords.json",
     /** One record per movie (title, year, genres, overview, votes, rating, poster), as TMDB last returned it. */
     recordsPath: ".cache/catalogue.json",
-    /** `<model>` is replaced by the embedding model's name; `.bin` holds the vectors, `.json` the index. */
+    /** `<model>` is replaced by the embedding model's name. `.bin` holds the vectors and `.json` the index. */
     vectorsPath: ".cache/vectors-<model>",
   },
 
   /** Phase 1 (the form) → TMDB filters. */
   intake: {
-    /** US ratings for everyone (best TMDB coverage). First row whose `maxAge` covers the youngest viewer wins; older = no limit. */
+    /**
+     * US ratings for everyone (best TMDB coverage). The first row whose `maxAge` covers the youngest viewer wins, and
+     * anyone older has no limit.
+     */
     certification: [
       { maxAge: 12, cert: "PG" },
       { maxAge: 15, cert: "PG-13" },
@@ -104,15 +106,15 @@ export const settings = {
   },
 
   /**
-   * Ranking tonight's pool, every turn (core/ranking.ts). Each term is a percentile within the movies still eligible,
-   * so the weights compare like with like. Chosen in the spike (todo.md, step 5), checked by `npm run rank-bench`.
+   * Ranking tonight's pool, every turn. Each term is a percentile within the movies still eligible, so the weights
+   * compare like with like. `npm run rank-bench` checks them.
    */
   ranking: {
     /** Similarity to the wish, and number of votes. */
     weights: { semantic: 0.8, popularity: 0.1 },
     /**
      * Penalties hit only the movies MOST similar to something unwanted: `weight` at the top, fading to 0 at
-     * percentile `from`. An avoid text ("princesses") hits the top 5%; a turned-down movie its closest 10%.
+     * percentile `from`. An avoid text ("princesses") hits the top 5%, and a turned-down movie its closest 10%.
      */
     avoid: { weight: 1, from: 0.95 },
     reject: { weight: 0.4, from: 0.9 },

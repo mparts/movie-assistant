@@ -2,7 +2,7 @@ import { describe, expect, test } from "vitest";
 import { cases, formatTable, percentile, runBench } from "../scripts/nluBench";
 import type { LlmClient } from "../src/core/types";
 
-/** Answers each case's utterance with the given moves; anything else (the warm-up) gets no moves. */
+/** Answers each case's utterance with the given moves. Anything else (the warm-up) gets no moves. */
 const stubFor = (answers: Record<string, unknown[]>): LlmClient => ({
   async json(messages) {
     const user = JSON.parse(messages[messages.length - 1].content);

@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import type { Env } from "../src/config/services";
 
-/** process.env overlaid with .env.local (KEY=value lines; `#` comments, quotes and inline comments handled). */
+/** process.env overlaid with .env.local (KEY=value lines, with `#` comments, quotes and inline comments handled). */
 export function loadEnv(file = ".env.local"): Env {
   const env: Env = { ...process.env };
   try {

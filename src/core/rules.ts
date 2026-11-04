@@ -1,7 +1,7 @@
 /**
  * Information-state-update rules. A rule is precondition and effect in one: it returns a thunk
- * (the effect) if it applies, otherwise undefined. The dialogue manager (dialogue/dme.ts) runs them.
- * Retrieval is local: after every user turn the DME ranks tonight's pool (`applyRanking`); no rule searches TMDB.
+ * (the effect) if it applies, otherwise undefined. The dialogue manager runs them.
+ * Retrieval is local. After every user turn the DME ranks tonight's pool with `applyRanking`, and no rule searches TMDB.
  */
 import { settings } from "../config/settings";
 import { notices } from "../config/prompts";
@@ -24,13 +24,13 @@ function usr<T extends Move["type"]>(is: IS, type: T): MoveOf<T>[] {
 export const withNotice = (is: IS, notice: string): IS =>
   is.private.notices.includes(notice) ? is : { ...is, private: { ...is.private, notices: [...is.private.notices, notice] } };
 
-/** A title the user names ("that one" = the movie in focus), looked up among what we know. */
 /** Lowercased, punctuation as single spaces, padded, so a match is always on whole words. */
 const wordsOf = (s: string) => {
   const norm = s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
   return ` ${norm || s.toLowerCase()} `;
 };
 
+/** A title the user names (no title means the movie in focus), looked up among what we know. */
 function findMovie(is: IS, title?: string): Movie | undefined {
   if (!title) return last(is.recommended);
   const t = wordsOf(title);
@@ -98,7 +98,7 @@ export const rules: Record<string, Rule> = {
     return texts.length ? () => ({ ...is, avoid: [...is.avoid, ...texts] }) : undefined;
   },
 
-  /** An actor or director, wanted or not; the latest word on a name wins. */
+  /** An actor or director, wanted or not. The latest word on a name wins. */
   integrate_person: ({ is }) => {
     const ms = usr(is, "person");
     if (!ms.length) return;

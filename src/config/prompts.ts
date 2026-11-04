@@ -1,5 +1,5 @@
 /**
- * Every prompt and every pre-written line the assistant speaks. Edit wording here; no text lives in code.
+ * Every prompt and every pre-written line the assistant speaks. Edit wording here. No text lives in code.
  */
 import type { Company, Intake } from "../core/intake";
 import type { Qud } from "../core/types";

@@ -6,7 +6,7 @@ import { isDebug, namesTitle } from "../core/util";
 
 const str = (x: unknown) => (typeof x === "string" && x.trim() ? x.trim() : undefined);
 
-/** Accept only well-formed moves; anything else the LLM produced is dropped. */
+/** Accept only well-formed moves. Anything else the LLM produced is dropped. */
 function clean(m: any): Move | null {
   if (!m || typeof m !== "object") return null;
   switch (m.type) {
@@ -136,8 +136,8 @@ function splitRefusals(text: string): { wish: string; avoid: string[] } {
 
 /**
  * Repairs the model's two common slips on the way to the rules: refusals in the wish are split off into avoids,
- * and a relative tone request (an `adjust` move "goofier", which the prompt no longer offers but small models still
- * produce, and which `clean` drops) is folded into the wish. Anything else is left as it is.
+ * and a relative tone request (an `adjust` move such as "goofier", which small models produce unasked and `clean`
+ * drops) is folded into the wish. Anything else is left as it is.
  */
 export function repairMoves(moves: Move[], wish: string, raw: unknown[]): Move[] {
   const out: Move[] = [];

@@ -1,7 +1,7 @@
 /**
- * Ranking regression set: runs the real ranking (core/ranking.ts `rankPool`) on tonight's real pools for two sample
- * profiles, with hand-labelled wishes (scripts/rankBench-wishes.ts), and reports recall@10 and forbidden titles.
- * Uses TMDB, the local catalogue and local Ollama (query embeddings); no LLM calls.
+ * Ranking regression set: runs the real ranking (`rankPool`) on tonight's real pools for two sample profiles, with
+ * hand-labelled wishes, and reports recall@10 and forbidden titles.
+ * Uses TMDB, the local catalogue and local Ollama (query embeddings). No LLM calls.
  *
  *   npm run rank-bench              summary
  *   npm run rank-bench -- --verbose  plus every top 10
@@ -28,7 +28,7 @@ const { pool: loadPool, catalogue } = createNodePool(tmdb, console.log);
 /* ---- labels ---- */
 
 const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
-/** "Robin Hood (1973)" pins the year; a plain title matches any year. */
+/** "Robin Hood (1973)" pins the year, and a plain title matches any year. */
 function matches(label: string, m: Movie): boolean {
   const y = label.match(/\((\d{4})\)\s*$/);
   const title = y ? label.slice(0, y.index).trim() : label;

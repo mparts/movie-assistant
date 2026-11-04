@@ -1,6 +1,6 @@
 /**
  * Top-level machine for the browser: Phase 1 (the settings form) and then the spoken chat, with speechstate
- * around the dialogue manager.  Prepare → Intake (form; INTAKE_DONE) → FindingMovies (tonight's pool) → Main (chat;
+ * around the dialogue manager.  Prepare → Intake (form, INTAKE_DONE) → FindingMovies (tonight's pool) → Main (chat,
  * CHANGE_SETTINGS goes back). Too few movies (or none, or an error) → PoolCheck: GO_ANYWAY or CHANGE_SETTINGS.
  */
 import { createActor, setup, assign, sendTo, fromPromise, type AnyMachineSnapshot } from "xstate";
@@ -20,7 +20,7 @@ const turnLog = createTurnLog();
 const { llm, embedQuery } = createClients("proxy", {}, { onLlmAnswer: turnLog.onLlmAnswer });
 
 /**
- * The browser's side of the dev server's pool endpoint (vite.config.ts).
+ * The browser's side of the dev server's pool endpoint.
  * The answer: movies as JSON (x-json-bytes long), zero-padded to 4 bytes, then Float32 rows.
  */
 export const fetchPool: PoolLoader = async (intake: Intake) => {
@@ -69,7 +69,7 @@ const dmMachine = setup({
       entry: ({ context }) => context.ssRef.send({ type: "PREPARE" }),
       on: { ASRTTS_READY: "Intake" },
     },
-    /** The form is on screen. A new conversation starts from its answers; nothing from an earlier one is kept. */
+    /** The form is on screen. A new conversation starts from its answers, and nothing from an earlier one is kept. */
     Intake: {
       on: {
         INTAKE_DONE: {
@@ -126,7 +126,7 @@ const dmMachine = setup({
               on: {
                 LISTEN_COMPLETE: {
                   target: "Idle",
-                  // raw text goes to the DME, which asks the LLM what it means; silence is a noinput move
+                  // raw text goes to the DME, which asks the LLM what it means, and silence is a noinput move
                   actions: sendTo("dmeID", ({ context }) => ({
                     type: "SAYS",
                     value: context.lastUtterance

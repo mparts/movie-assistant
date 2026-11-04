@@ -3,7 +3,7 @@
  *   Select:  respond() → one `say` move, sent to the parent.
  *   Update:  Init → Grounding (wait for SAYS) → Understand (LLM) → Integrate (rule chain)
  *            → Retrieve (embed new wish/avoid texts → rank tonight's pool) → Done.
- * Ranking is local and synchronous (core/ranking.ts): no TMDB search during the chat.
+ * Ranking is local and synchronous: no TMDB search during the chat.
  */
 import { AnyTransitionConfig, assign, fromPromise, sendTo, setup } from "xstate";
 import { notices, utterances } from "../config/prompts";
@@ -224,7 +224,7 @@ export const dme = setup({
                     return { vectors };
                   }),
                 },
-                // Without the vectors the ranking still works (people, popularity); try again next turn.
+                // Without the vectors the ranking still works (people, popularity). Try again next turn.
                 onError: {
                   target: "Rank",
                   actions: ({ event }) => console.warn("[embeddings unavailable; ranking without the wish this turn]", event.error),
