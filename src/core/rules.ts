@@ -7,7 +7,6 @@ import { settings } from "../config/settings";
 import { notices } from "../config/prompts";
 import type { Pool } from "./pool";
 import { featuresPerson, rankPool, type QueryVectors } from "./ranking";
-import { evidenceFromMoves } from "./readiness";
 import { InformationState as IS, Move, MoveOf, Movie, NlgMode, Qud, TotalInformationState } from "./types";
 import { last } from "./util";
 
@@ -72,7 +71,6 @@ export const rules: Record<string, Rule> = {
     const moves = latest_moves ?? [];
     const speaker = latest_speaker!;
     const text = speaker === "sys" ? spokenText(moves) : latest_text || settings.dialogue.silenceMarker;
-    const evidence = speaker === "usr" ? evidenceFromMoves(moves) : [];
     // "Yes, this one" is remembered until the user says anything substantive again, so a following "thanks" stays in wrap-up.
     const accepted =
       speaker !== "usr" || moves.length === 0 || moves.every((m) => m.type === "noinput")
@@ -84,19 +82,7 @@ export const rules: Record<string, Rule> = {
       ...is,
       shared: { ...is.shared, lu: { moves, speaker } },
       history: text ? [...is.history, { speaker, text }] : is.history,
-      // Any feedback from the user ("seen it", "not that one", a new wish) ends a run of suggestions; silence or a
-      // vague reply keeps it, which is what leads to a clarifying question.
-      recommendStreak:
-        speaker === "usr"
-          ? moves.some((m) => m.type !== "noinput") ? 0 : is.recommendStreak
-          : recommendedIds(moves).length ? is.recommendStreak + 1 : 0,
       accepted,
-      readiness: evidence.length
-        ? {
-            meaningfulTurns: is.readiness.meaningfulTurns + 1,
-            evidence: [...new Set([...is.readiness.evidence, ...evidence])],
-          }
-        : is.readiness,
     };
   },
 
@@ -172,7 +158,6 @@ export const rules: Record<string, Rule> = {
 
 function qudAfter(mode: NlgMode, suggested: boolean): Qud | undefined {
   if (mode === "explore") return "taste";
-  if (mode === "clarify") return "change";
   if (mode === "wrapup") return "none";
   return suggested ? "suggestion" : undefined;
 }

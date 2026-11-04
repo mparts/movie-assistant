@@ -2,7 +2,7 @@ import { understandByQud, understandCore } from "../config/prompts";
 import { settings } from "../config/settings";
 import { lastSuggested, stateSummary } from "../core/state";
 import type { InformationState, LlmClient, Move } from "../core/types";
-import { isDebug } from "../core/util";
+import { isDebug, namesTitle } from "../core/util";
 import { ground, isAffirmation, repairMoves } from "./grounding";
 
 const str = (x: unknown) => (typeof x === "string" && x.trim() ? x.trim() : undefined);
@@ -33,8 +33,12 @@ function clean(m: any): Move | null {
 /** One LLM call: utterance (+ short history and known state) → moves. */
 export async function understand(llm: LlmClient, text: string, is: InformationState): Promise<Move[]> {
   const suggested = lastSuggested(is);
-  // A bare "yes" / "let's go with that" right after a suggestion is taking it: no LLM needed (and none gets it wrong).
-  if (suggested && is.recommendStreak > 0 && isAffirmation(text)) return [{ type: "accept" }];
+  const lastTurn = is.history[is.history.length - 1];
+  const lastSystem = lastTurn?.speaker === "sys" ? lastTurn.text : undefined;
+  // A bare "yes" / "let's go with that" right after Jake named his suggestion is taking it: no LLM needed (and none
+  // gets it wrong). After any other turn of his (an answer, or "want something lighter?") the LLM decides.
+  if (suggested && is.qud === "suggestion" && lastSystem && namesTitle(lastSystem, suggested) && isAffirmation(text))
+    return [{ type: "accept" }];
 
   const out: any = await llm.json(
     [
@@ -54,7 +58,5 @@ export async function understand(llm: LlmClient, text: string, is: InformationSt
   const raw: unknown[] = Array.isArray(out?.moves) ? out.moves : [];
   if (isDebug()) console.log(`[NLU raw] ${JSON.stringify(raw)}`);
   const moves = repairMoves(raw.map(clean).filter((m): m is Move => m !== null), is.wish, raw);
-  const lastTurn = is.history[is.history.length - 1];
-  const lastSystem = lastTurn?.speaker === "sys" ? lastTurn.text : undefined;
   return ground(moves, text, lastSystem, suggested, is.wish);
 }

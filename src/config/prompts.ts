@@ -21,7 +21,6 @@ export const utterances = {
   systemError: "Sorry, I lost my train of thought for a second. Could you say that again?",
   /** The LLM kept breaking the rules, per mode. */
   exploreFallback: "What kind of feeling would you like the movie to leave you with?",
-  clarifyFallback: "Neither of those quite landed. What would you change about them?",
   wrapupFallback: "Great, enjoy the movie!",
 };
 
@@ -73,9 +72,6 @@ The assistant just suggested the movie in "lastSuggestedMovie". If they describe
 (whatWeKnow.wish is "A light romantic movie for a date night.") "nope, not that one... got anything funnier?" -> {"moves":[{"type":"reject"},{"type":"wish","text":"A funny, light romantic comedy for a date night."}]}
 "ok that sounds great, let's watch it tonight" -> {"moves":[{"type":"accept"}]}
 (whatWeKnow.wish is "A light romantic movie for a date night.") "my girlfriend is really into horses" -> {"moves":[{"type":"wish","text":"A light romantic movie with horses for a date night."}]}`,
-  change: `
-The assistant just offered to drop or loosen something. A "yes" to a question that proposed something other than a movie means that thing: record the move that carries it out.
-(whatWeKnow.wish is "A light romantic movie for a date night.") (the assistant had asked "want me to look for something funnier?") "yes, go for it" -> {"moves":[{"type":"wish","text":"A funny, light romantic comedy for a date night."}]}`,
   none: "",
 };
 
@@ -96,7 +92,7 @@ How to behave:
 - If their reaction is lukewarm or vague ("maybe", "sure", "I guess", "hmm"), do NOT just throw another movie at them. Ask one light question to find out what isn't clicking or what they'd rather have. Don't suggest a different movie two turns in a row unless they rejected the last one, had seen it, or asked for another.
 - If they ask you a question (what genre, what it's about, how long, who's in it, who directed it), ANSWER IT FIRST from the entry in "suggestedDetails" (paraphrase the description; if a detail isn't there, say you're not sure) and set "recommend" to null. Do not suggest a different movie unless they reject, have seen, or ask for another.
 - Only ever suggest a movie that appears in "candidates", and set "recommend" to its id. Never suggest any other movie (you may mention movies the person brought up). The only facts you may state about a candidate or a suggested movie are those in its entry: description, genres, year, rating, runtimeMinutes, directors, cast (the top-billed actors) and tagline. If a fact is missing, don't mention it. Never guess.
-- "candidatePool" tells you the situation: "none_yet" = we don't know their taste yet, nothing to suggest, keep getting to know them; "ok" = you may suggest; "empty" = nothing matches, say so and offer to loosen one specific thing; "exploring" = no candidates are available now.
+- "candidatePool" tells you the situation: "ok" = you may suggest; "empty" = nothing matches, say so and offer to loosen one specific thing; "exploring" = no candidates are available now.
 - "notices" are things that happened behind the scenes this turn; weave them in naturally if relevant (a title you couldn't find, an actor with no movies tonight, a question about length that tonight's settings already answer).
 
 Reply with ONLY a JSON object: {"say": "<what you say aloud>", "recommend": <candidate id, or null>}`;
@@ -104,8 +100,6 @@ Reply with ONLY a JSON object: {"say": "<what you say aloud>", "recommend": <can
 /** Appended to respondSystem depending on the dialogue mode. */
 export const respondModes = {
   recommend: "The conversation is ready for a recommendation. You may choose a candidate if appropriate.",
-  clarify:
-    "CLARIFY MODE: You have just suggested two movies in a row, so do NOT suggest, name, or hint at any movie now. Briefly acknowledge what they said, then ask exactly ONE question to find out what is missing. Prefer offering to drop or loosen one specific thing from whatWeKnow (a wanted genre, a year range, or something they asked to avoid; the time limit is tonight's setting), or ask what they would change about the last suggestions. Output recommend:null.",
   wrapup:
     "WRAP-UP MODE: The person has just accepted the movie named in \"acceptedMovie\". In one or two warm sentences, confirm the choice (one short, true reason from its entry is fine) and wish them a good watch. Do NOT suggest another movie and do NOT ask a question. Output recommend:null.",
   explore:

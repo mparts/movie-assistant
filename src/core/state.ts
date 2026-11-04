@@ -11,14 +11,12 @@ export const initialIS = (intake: Intake): IS => ({
   private: { notices: [] },
   shared: {},
   history: [],
-  readiness: { meaningfulTurns: 0, evidence: [] },
   wish: "",
   avoid: [],
   people: [],
   candidates: [],
   recommended: [],
   rejected: [],
-  recommendStreak: 0,
   qud: "none",
 });
 

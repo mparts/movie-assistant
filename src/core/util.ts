@@ -1,4 +1,8 @@
 export const last = <T>(xs: T[]): T | undefined => xs[xs.length - 1];
+
+const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+/** Does `text` name this movie title? Whole words, any case: "Up" is not in "supper". */
+export const namesTitle = (text: string, title: string) => new RegExp(`(^|\\W)${escape(title)}(\\W|$)`, "i").test(text);
 export const sameIds = <T extends { id: number }>(a: T[], b: T[]) =>
   a.length === b.length && a.every((m, i) => m.id === b[i].id);
 

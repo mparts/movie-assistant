@@ -97,7 +97,6 @@ export const cases: BenchCase[] = [
     name: "real-yes-to-an-alternative",
     history: [...realSuggestion, sys("Looks like none of the picks are big comedies, but we could go with a sweet romance like Past Lives if that works for you.")],
     justSuggested: false,
-    qud: "change",
     state: romcom,
     utterance: "yes it works!!",
     // A yes to Jake's proposal may update the wish or accept; never an avoid.
@@ -320,7 +319,6 @@ export function stateFor(c: BenchCase): InformationState {
     ...base,
     history: c.history ?? [],
     recommended: c.suggested ? [stub(c.suggested)] : [],
-    recommendStreak: justSuggested ? 1 : 0,
     qud: c.qud ?? (justSuggested ? "suggestion" : sysLast ? "taste" : "none"),
   };
   return c.state ? c.state(is) : is;

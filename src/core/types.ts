@@ -59,10 +59,10 @@ export type Move =
 export type MoveOf<T extends Move["type"]> = Extract<Move, { type: T }>;
 
 /** How Jake was told to reply this turn (prompts.ts `respondModes`). */
-export type NlgMode = "explore" | "clarify" | "recommend" | "wrapup";
+export type NlgMode = "explore" | "recommend" | "wrapup";
 
-/** What Jake's last turn left open: a taste question, the movie he suggested, an offer to change something, or nothing. */
-export type Qud = "taste" | "suggestion" | "change" | "none";
+/** What Jake's last turn left open: a taste question, the movie he suggested, or nothing. */
+export type Qud = "taste" | "suggestion" | "none";
 
 /** What the system says in one turn. No mode for scripted turns that leave the question open as it was. */
 export interface Reply {
@@ -82,8 +82,6 @@ export interface InformationState {
   };
   shared: { lu?: { speaker: Speaker; moves: Move[] } };
   history: Turn[];
-  /** Recommendation gate: substantive user turns and distinct pieces of information. */
-  readiness: { meaningfulTurns: number; evidence: string[] };
 
   /** What they want, as a short movie description (rewritten by the NLU whenever taste changes). Ranked semantically. */
   wish: string;
@@ -97,8 +95,6 @@ export interface InformationState {
   recommended: Movie[]; // in order shown; last = focus
   /** "no" = turned down (similar movies sink); "seen" = already watched (only removed). */
   rejected: { id: number; reason: "seen" | "no" }[];
-  /** consecutive system turns that recommended a movie; reset by any turn that didn't */
-  recommendStreak: number;
   /** What Jake's last turn left open. */
   qud: Qud;
   /** Id of the suggested movie the user accepted. Cleared when they say anything substantive afterwards. */

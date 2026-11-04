@@ -1,9 +1,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { describe, expect, test } from "vitest";
 import { poolCriteria } from "../src/core/state";
-import { freshIS } from "./fixtures";
 import { parseIntake } from "../src/core/intake";
-import { recommendationReadiness } from "../src/core/readiness";
 
 describe("intake (Phase 1)", () => {
   test("every sample in profiles/ follows the contract", () => {
@@ -26,21 +24,5 @@ describe("intake (Phase 1)", () => {
       runtime: { min: 60, max: 100 }, excludeGenres: ["Horror"], certificationLte: "PG",
       watch: { region: "NL", providers: [8, 337] },
     });
-  });
-});
-
-describe("readiness", () => {
-
-  test("taste + enough turns and signals is ready; \"just pick\" skips the wait", () => {
-    const s = freshIS();
-    s.wish = "A funny movie.";
-    expect(recommendationReadiness(s).ready).toBe(false);
-    s.readiness = { meaningfulTurns: 2, evidence: ["genre:Comedy", "runtime"] };
-    expect(recommendationReadiness(s).ready).toBe(true);
-
-    const t = freshIS();
-    t.wish = "A comedy.";
-    t.history = [{ speaker: "usr", text: "just pick one" }];
-    expect(recommendationReadiness(t).ready).toBe(true);
   });
 });

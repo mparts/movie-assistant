@@ -14,7 +14,7 @@ const after = (title: string | null, jake: string): IS => {
   is.history = [{ speaker: "sys", text: jake }];
   if (title) {
     is.recommended = [movie(1, title)];
-    is.recommendStreak = 1;
+    is.qud = "suggestion";
   }
   return is;
 };

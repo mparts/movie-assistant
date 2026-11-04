@@ -8,8 +8,6 @@ export const settings = {
     silenceMarker: "(silence)",
     /** How many candidates the LLM sees (best-ranked first). */
     candidatesShown: 8,
-    /** After this many recommendations in a row, stop suggesting and ask what is missing. */
-    maxRecommendStreak: 2,
     /** Tries when the LLM breaks a rule (unknown movie id, naming a movie too early). */
     respondAttempts: 2,
     maxSayChars: 700,
@@ -22,8 +20,8 @@ export const settings = {
     descriptionChars: { candidate: 220, suggested: 400 },
     /** Top-billed actors Jake is told about per movie (the catalogue keeps `search.castShown`). */
     castInFacts: 3,
-    /** Recommendations start after this many informative user turns AND distinct signals... */
-    readiness: { minTurns: 2, minSignals: 2 },
+    /** Jake suggests once there is taste and the user has spoken this many times (silence does not count). */
+    minUserTurns: 2,
     /**
      * A reply that is ONLY agreement ("yes", "sounds good", "let's go with that"), judged on the lowercased text with
      * punctuation and apostrophes removed ("let's" → "lets"). Right after a suggested movie it means "I'll take it"
@@ -36,9 +34,6 @@ export const settings = {
     ),
     /** More words than this is not a bare agreement, whatever it matches. */
     affirmationMaxWords: 12,
-    /** ...unless the user asks us to stop asking questions. */
-    skipQuestions:
-      /\b(just (pick|choose|recommend)|surprise me|you (pick|choose)|stop asking|give me (a|one) (movie|recommendation)|recommend (something|one|a movie) (now|already))\b/i,
   },
 
   llm: {
