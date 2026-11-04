@@ -46,6 +46,20 @@ const romcom = (is: InformationState): InformationState => ({ ...is, genres: ["R
 const wishes = (m: Move[], re: RegExp) => of(m, "wish").some((w) => re.test(w.text));
 /** Words that turn a wish into its opposite: they belong in "avoid" or a negated genre. */
 const NEGATION = /\b(no|not|without|never|nothing|avoid|but)\b/i;
+/** A family chat where the taste changed after Jake asked or suggested, and the new words got lost. */
+const familyAsked: Turn[] = [
+  sys("Hey! I'm Jake, your movie companion. How are you feeling today?"),
+  usr("hey! something for the family tonight, maybe an animated adventure"),
+  sys("Sounds lovely. Anything in particular the kids enjoy?"),
+];
+const familySuggested: Turn[] = [
+  ...familyAsked,
+  usr("not really, you pick"),
+  sys("How about Luca? It's a gentle animated adventure about two sea monsters spending a summer on the Italian coast."),
+];
+const familyWish = (is: InformationState): InformationState => ({ ...is, wish: "A gentle animated adventure." });
+/** "animals", not "animated": the model tends to fold the new word into the old wish. */
+const ANIMALS = /\banimals?\b/i;
 
 export const cases: BenchCase[] = [
   {
@@ -311,6 +325,45 @@ export const cases: BenchCase[] = [
     suggested: "Knives Out",
     utterance: "who's in it?",
     check: (m) => expect(m.length === 0, `expected no moves, got ${JSON.stringify(m)}`),
+  },
+  {
+    name: "talking-animals-after-suggestion",
+    history: familySuggested,
+    suggested: "Luca",
+    state: familyWish,
+    utterance: "something with talking animals would be great",
+    check: (m) => expect(wishes(m, ANIMALS), "'animals' did not reach the wish"),
+  },
+  {
+    name: "dinosaurs-after-suggestion",
+    history: familySuggested,
+    suggested: "Luca",
+    state: familyWish,
+    utterance: "something with dinosaurs",
+    check: (m) => expect(wishes(m, /dinosaur/i), "'dinosaurs' did not reach the wish"),
+  },
+  {
+    name: "kids-love-animals-after-suggestion",
+    history: familySuggested,
+    suggested: "Luca",
+    state: familyWish,
+    utterance: "the kids love animals",
+    check: (m) => expect(wishes(m, ANIMALS), "'animals' did not reach the wish"),
+  },
+  {
+    name: "friendship-after-suggestion",
+    history: familySuggested,
+    suggested: "Luca",
+    state: familyWish,
+    utterance: "how about a movie about friendship",
+    check: (m) => expect(wishes(m, /friend/i), "'friendship' did not reach the wish"),
+  },
+  {
+    name: "funny-animals-keeps-the-word",
+    history: familyAsked,
+    state: familyWish,
+    utterance: "something funny with animals",
+    check: (m) => expect(of(m, "wish").some((w) => ANIMALS.test(w.text) && /funn|comed|laugh|humou?r/i.test(w.text)), "no wish with both 'animals' and funny"),
   },
 ];
 

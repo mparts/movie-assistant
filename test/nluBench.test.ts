@@ -35,6 +35,11 @@ const perfect: Record<string, unknown[]> = {
   "yes please do that!!": [{ type: "retract", slot: "dislikes" }], // a name the NLU may use; normalised to "avoidGenres"
   "ok that sounds great, let's watch it tonight": [{ type: "accept" }],
   "no scary stuff please": [{ type: "prefer", genre: "Horror", negated: true }],
+  "something with talking animals would be great": [{ type: "wish", text: "A gentle animated adventure with talking animals." }],
+  "something with dinosaurs": [{ type: "wish", text: "A gentle animated adventure with dinosaurs." }],
+  "the kids love animals": [{ type: "wish", text: "A gentle animated adventure with animals." }],
+  "how about a movie about friendship": [{ type: "wish", text: "A gentle animated adventure about friendship." }],
+  "something funny with animals": [{ type: "wish", text: "A funny animated adventure with animals." }],
 };
 
 describe("NLU bench", () => {

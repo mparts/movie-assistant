@@ -54,3 +54,20 @@ describe("rules: naming a movie", () => {
     expect(run("integrate_seen_reject", is)!.rejected).toEqual([]);
   });
 });
+
+describe("rules: question under discussion", () => {
+  test("Jake's turn records what it left open, from the mode he replied in", () => {
+    const after = (qud: IS["qud"], say: Move) => {
+      const is = { ...freshIS(), qud };
+      const heardSys = rules.get_latest_move({ is, latest_moves: [say], latest_speaker: "sys" })!();
+      return run("integrate_qud", heardSys)?.qud ?? heardSys.qud;
+    };
+    const say = (mode?: "explore" | "clarify" | "recommend" | "wrapup", movieId?: number): Move => ({ type: "say", text: "x", mode, movieId });
+    expect(after("none", say("explore"))).toBe("taste");
+    expect(after("taste", say("recommend", 7))).toBe("suggestion");
+    expect(after("suggestion", say("recommend"))).toBe("suggestion"); // answering "who's in it?"
+    expect(after("suggestion", say("clarify"))).toBe("change");
+    expect(after("suggestion", say("wrapup"))).toBe("none");
+    expect(after("suggestion", say())).toBe("suggestion"); // no-input prompt or an error message
+  });
+});

@@ -65,14 +65,21 @@ export type Move =
   | { type: "retract"; slot: string }
   | { type: "accept" } // "yes, this one": they take the movie the assistant just suggested
   | { type: "noinput" }
-  | { type: "say"; text: string; movieId?: number }; // system utterance (+ the movie it recommends)
+  | { type: "say"; text: string; movieId?: number; mode?: NlgMode }; // system utterance (+ the movie it recommends)
 
 export type MoveOf<T extends Move["type"]> = Extract<Move, { type: T }>;
 
-/** What the system says in one turn. */
+/** How Jake was told to reply this turn (prompts.ts `respondModes`). */
+export type NlgMode = "explore" | "clarify" | "recommend" | "wrapup";
+
+/** What Jake's last turn left open: a taste question, the movie he suggested, an offer to change something, or nothing. */
+export type Qud = "taste" | "suggestion" | "change" | "none";
+
+/** What the system says in one turn. No mode for scripted turns that leave the question open as it was. */
 export interface Reply {
   say: string;
   movieId?: number;
+  mode?: NlgMode;
 }
 
 /** Pending internal work: look a title up in TMDB. */
@@ -115,6 +122,8 @@ export interface InformationState {
   rejected: { id: number; reason: "seen" | "no" }[];
   /** consecutive system turns that recommended a movie; reset by any turn that didn't */
   recommendStreak: number;
+  /** What Jake's last turn left open. */
+  qud: Qud;
   /** Id of the suggested movie the user accepted. Cleared when they say anything substantive afterwards. */
   accepted?: number;
   /** Phase 1 facts, set once at the start; no move changes them. */

@@ -52,7 +52,7 @@ describe("A: a bare yes after a suggestion is an accept, without the LLM", () =>
     is.candidates = [movie(2, "Other Film")];
     is.history.push({ speaker: "usr", text: "yes this one" });
     const llm = llmSays({ say: "Great pick, enjoy About Time tonight.", recommend: null });
-    expect(await respond(llm, is)).toEqual({ say: "Great pick, enjoy About Time tonight." });
+    expect(await respond(llm, is)).toEqual({ say: "Great pick, enjoy About Time tonight.", mode: "wrapup" });
     const [messages] = llm.json.mock.calls[0] as [{ role: string; content: string }[]];
     expect(messages[0].content).toContain("WRAP-UP MODE");
     const sent = JSON.parse(messages[1].content);
@@ -70,7 +70,7 @@ describe("wrap-up with a duplicate title", () => {
     is.candidates = [movie(2, "Solaris"), movie(3, "Other Film")];
     is.history.push({ speaker: "usr", text: "yes, this one!!" });
     const llm = llmSays({ say: "Solaris it is, enjoy it.", recommend: 1 });
-    expect(await respond(llm, is)).toEqual({ say: "Solaris it is, enjoy it." });
+    expect(await respond(llm, is)).toEqual({ say: "Solaris it is, enjoy it.", mode: "wrapup" });
     expect(llm.json).toHaveBeenCalledTimes(1);
   });
 });

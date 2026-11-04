@@ -23,6 +23,7 @@ export const initialIS = (intake: Intake): IS => ({
   recommended: [],
   rejected: [],
   recommendStreak: 0,
+  qud: "none",
 });
 
 /** Taste = a wish, a wanted genre, a liked movie, or a wanted person. Filters and dislikes alone are not taste. */

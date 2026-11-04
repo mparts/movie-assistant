@@ -10,7 +10,7 @@ import { resolveGenres } from "./lexicon";
 import type { Pool } from "./pool";
 import { featuresPerson, rankPool, type QueryVectors } from "./ranking";
 import { evidenceFromMoves } from "./readiness";
-import { Action, InformationState as IS, Move, MoveOf, Movie, TotalInformationState } from "./types";
+import { Action, InformationState as IS, Move, MoveOf, Movie, NlgMode, Qud, TotalInformationState } from "./types";
 import { addUnique, last, without } from "./util";
 
 type Rule = (context: TotalInformationState) => ((x: void) => IS) | undefined;
@@ -215,4 +215,20 @@ export const rules: Record<string, Rule> = {
       candidates: is.candidates.filter((c) => !shown.some((m) => m.id === c.id)),
     });
   },
+
+  /** What Jake's turn left open, from the mode he replied in. A recommend turn without a movie leaves it as it was. */
+  integrate_qud: ({ is }) => {
+    const lu = is.shared.lu;
+    if (lu?.speaker !== "sys") return;
+    const say = lu.moves.find((m): m is MoveOf<"say"> => m.type === "say");
+    const qud = say?.mode && qudAfter(say.mode, say.movieId !== undefined);
+    return qud && qud !== is.qud ? () => ({ ...is, qud }) : undefined;
+  },
 };
+
+function qudAfter(mode: NlgMode, suggested: boolean): Qud | undefined {
+  if (mode === "explore") return "taste";
+  if (mode === "clarify") return "change";
+  if (mode === "wrapup") return "none";
+  return suggested ? "suggestion" : undefined;
+}

@@ -2,14 +2,12 @@ import { respondModes, respondSystem, utterances } from "../config/prompts";
 import { settings } from "../config/settings";
 import { hasTaste, stateSummary, tasteProfile } from "../core/state";
 import { recommendationReadiness } from "../core/readiness";
-import type { InformationState, LlmClient, Movie, Reply } from "../core/types";
+import type { InformationState, LlmClient, Movie, NlgMode as Mode, Reply } from "../core/types";
 
 const { dialogue: d } = settings;
 const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 /** Whole-word, case-insensitive: "Up" must not match "supper". */
 const mentions = (text: string, title: string) => new RegExp(`(^|\\W)${escape(title)}(\\W|$)`, "i").test(text);
-
-type Mode = "explore" | "clarify" | "recommend" | "wrapup";
 
 /** What Jake may say about a movie: only these facts (the prompt forbids anything else). Missing facts are left out. */
 const facts = (m: Movie, descriptionChars: number) => ({
@@ -27,7 +25,7 @@ const facts = (m: Movie, descriptionChars: number) => ({
 /** One LLM call: conversation + state + real TMDB candidates → what to say (and which candidate, if any). */
 export async function respond(llm: LlmClient, is: InformationState): Promise<Reply> {
   // Scripted turns: no LLM needed.
-  if (is.history.length === 0) return { say: utterances.opening(is.intake) };
+  if (is.history.length === 0) return { say: utterances.opening(is.intake), mode: "explore" };
   const lastUser = [...is.history].reverse().find((t) => t.speaker === "usr");
   if (lastUser?.text === d.silenceMarker) return { say: utterances.noInput };
 
@@ -85,17 +83,17 @@ export async function respond(llm: LlmClient, is: InformationState): Promise<Rep
         console.warn(`[respond] LLM recommended id ${id}, which is not a candidate; retrying`);
         continue;
       }
-      return { say, movieId: id };
+      return { say, movieId: id, mode };
     }
     if ((mode !== "wrapup" && id !== undefined) || forbiddenTitles.some((t) => mentions(say, t))) {
       console.warn("[respond] Premature recommendation blocked; retrying");
       continue;
     }
-    return { say };
+    return { say, mode };
   }
 
-  if (mode === "wrapup") return { say: utterances.wrapupFallback };
-  if (mode === "clarify") return { say: utterances.clarifyFallback };
-  if (mode === "explore") return { say: utterances.exploreFallback };
+  if (mode === "wrapup") return { say: utterances.wrapupFallback, mode };
+  if (mode === "clarify") return { say: utterances.clarifyFallback, mode };
+  if (mode === "explore") return { say: utterances.exploreFallback, mode };
   throw new Error("LLM kept recommending a movie outside the candidates");
 }

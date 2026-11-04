@@ -51,6 +51,7 @@ const INTEGRATE_RULES = [
   "integrate_like",
   "integrate_seen_reject",
   "integrate_recommend",
+  "integrate_qud",
 ];
 
 /** Cache keys in `context.vectors`: a query text (wish or avoid), or a liked movie. */
@@ -146,7 +147,7 @@ export const dme = setup({
               target: "SelectionDone",
               actions: assign(({ context, event }) => {
                 const r = event.output as Reply;
-                const move: Move = { type: "say", text: r.say, movieId: r.movieId };
+                const move: Move = { type: "say", text: r.say, movieId: r.movieId, mode: r.mode };
                 return { is: { ...context.is, next_moves: [move] } };
               }),
             },

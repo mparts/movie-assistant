@@ -29,7 +29,7 @@ describe("guards on the LLM", () => {
 
   test("before the readiness gate, naming a candidate is blocked (whole word) and falls back", async () => {
     const llm = fakeLlm({ say: "How about Example tonight?", recommend: null });
-    expect(await respond(llm, early())).toEqual({ say: utterances.exploreFallback });
+    expect(await respond(llm, early())).toEqual({ say: utterances.exploreFallback, mode: "explore" });
     expect(llm.json).toHaveBeenCalledTimes(settings.dialogue.respondAttempts);
   });
 
@@ -37,6 +37,6 @@ describe("guards on the LLM", () => {
     const is = early();
     is.candidates = [{ ...movie, title: "Past" }];
     const llm = fakeLlm({ say: "That sounds like a fun night out.", recommend: null });
-    expect(await respond(llm, is)).toEqual({ say: "That sounds like a fun night out." });
+    expect(await respond(llm, is)).toEqual({ say: "That sounds like a fun night out.", mode: "explore" });
   });
 });
