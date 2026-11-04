@@ -4,7 +4,7 @@ The dialogue manager and the two LLM calls it makes on each user turn.
 
 - `dme.ts` is the Dialogue Manager Engine, an xstate machine with two states.
   - `Select` calls `respond` and sends Elisa's `say` move to the parent machine as `NEXT_MOVES`.
-  - `Update` waits for `SAYS`, then goes Grounding → Understand (the NLU, for user text only) → Integrate (the rules from `core/rules.ts`) → Retrieve (embed new wish and avoid texts, then rank the pool).
+  - `Update` waits for `SAYS`, then goes Grounding => Understand (the NLU, for user text only) => Integrate (the rules from `core/rules.ts`) => Retrieve (embed new wish and avoid texts, then rank the pool).
 
   Elisa's own turn comes back through `SAYS` too, so her suggestion is integrated like any other move. After her turn, Update starts again and waits for the user. After a user turn it goes on to Select. `ruleChain` builds the Integrate states: each rule fires if it applies, and the chain moves on either way. Query vectors are cached by text in `context.vectors`, so only new texts are embedded. If embedding fails, the turn is ranked without the wish.
 - `nlu.ts` turns an utterance into moves. `understand` sends the last few turns, `stateSummary` and the utterance to the LLM, with the prompt chosen by `qud`. A bare "yes" right after Elisa named her suggestion becomes an `accept` without asking the LLM (`isAffirmation`). The LLM's answer then goes through three checks:
