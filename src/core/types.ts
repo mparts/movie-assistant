@@ -180,6 +180,8 @@ export interface DMContext {
   elisaSaid?: string;
   /** Elisa has said her wrap-up: the conversation is over and she stops listening. */
   ended?: boolean;
+  /** The movie Elisa suggested last, shown as a card. */
+  suggested?: Movie;
 }
 
 export type DMEvent =

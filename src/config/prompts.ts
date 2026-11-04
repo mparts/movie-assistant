@@ -177,3 +177,6 @@ export const formText = {
     status: { speaking: "Elisa is talking", recognising: "Listening…", idle: "Thinking…", "not-ready": "Getting ready…", error: "Speech error" } as Record<string, string>,
   },
 };
+
+/** Labels on the suggested-movie card in the chat. */
+export const movieCardText = { director: "Directed by", cast: "With", minutes: (n: number) => `${n} min` };

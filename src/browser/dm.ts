@@ -56,7 +56,7 @@ const dmMachine = setup({
         INTAKE_DONE: {
           target: "FindingMovies",
           actions: assign(({ event }) => ({
-            is: initialIS(event.intake), pool: undefined, poolError: undefined, elisaSaid: undefined, lastUtterance: undefined, ended: false,
+            is: initialIS(event.intake), pool: undefined, poolError: undefined, elisaSaid: undefined, lastUtterance: undefined, ended: false, suggested: undefined,
           })),
         },
       },
@@ -132,7 +132,11 @@ const dmMachine = setup({
                   target: "Speaking",
                   actions: [
                     ({ context }) => turnLog.turn(dmeContext()!, context.confidence),
-                    assign(({ event }) => ({ elisaSaid: spokenText(event.value), ended: isWrapup(event.value) })),
+                    assign(({ context, event }) => {
+                      const say = event.value.find((m) => m.type === "say" && m.movieId !== undefined);
+                      const movie = say?.type === "say" ? context.pool?.movies.find((m) => m.id === say.movieId) : undefined;
+                      return { elisaSaid: spokenText(event.value), ended: isWrapup(event.value), suggested: movie ?? context.suggested };
+                    }),
                     sendTo("dmeID", ({ event }) => ({ type: "SAYS", value: { speaker: "sys", moves: event.value } })),
                   ],
                 },
