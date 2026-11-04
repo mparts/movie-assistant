@@ -44,6 +44,8 @@ Move types:
 {"type":"reject","title":"<optional>"}  they don't want that particular movie; omit title if they mean the one just suggested
 {"type":"accept"}  they take the movie the assistant just suggested: "yes", "this one", "let's watch it". Never use "seen" for that
 
+Years, decades, how new or old a movie is, and its length are not taste: never record them, not even inside a wish or as a relative request ("from the 90s", "something recent", "anything shorter?"). Record the rest of the utterance as usual.
+
 Use the conversation and the known state to resolve "that", "it", "the first one". Several moves per utterance are fine. Speech recognition may mishear titles and names: if one looks misheard, write the most likely real title or name.
 The assistant's last turn is context, not the person's words: never record something only the assistant said, including the options it offered.
 
@@ -56,6 +58,8 @@ Examples:
 "anything but horror, I can't sleep after those" -> {"moves":[{"type":"avoid","text":"horror"}]}
 "anything with Keanu Reeves? but please no Adam Sandler" -> {"moves":[{"type":"person","name":"Keanu Reeves"},{"type":"person","name":"Adam Sandler","negated":true}]}
 "I only have about ninety minutes" -> {"moves":[]}
+"a thriller from the last few years" -> {"moves":[{"type":"wish","text":"A tense, gripping thriller."}]}
+"a Spielberg movie would be fun" -> {"moves":[{"type":"person","name":"Steven Spielberg"}]}
 "please, nothing with Will Ferrell" -> {"moves":[{"type":"person","name":"Will Ferrell","negated":true}]}
 "hi, how are you?" -> {"moves":[]}`;
 

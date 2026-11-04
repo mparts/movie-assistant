@@ -232,6 +232,15 @@ export const cases: BenchCase[] = [
     check: (m) => expect(of(m, "person").some((p) => /nolan/i.test(p.name) && !p.negated), "no wanted Nolan"),
   },
   {
+    // From a smoke test: a year request became the wish "A movie from the last few years."
+    name: "year-records-nothing",
+    history: [sys("A light romcom, nice. Anything else that matters tonight?")],
+    state: romcom,
+    utterance: "something from the last few years",
+    check: (m) =>
+      expect(!m.some((x) => "text" in x && /year|recent|\bnew|modern|decade|\d/i.test(x.text)), `a year went into a move: ${JSON.stringify(m)}`),
+  },
+  {
     name: "negated-genre",
     utterance: "anything but horror, I can't sleep after those",
     check: (m) => expect(of(m, "avoid").some((a) => /horror/i.test(a.text)), "horror not avoided"),
