@@ -3,32 +3,13 @@ import { createLlm, orderByPreference } from "../src/services/llm";
 import { buildDiscoverParams } from "../src/services/tmdb";
 
 describe("tmdb params", () => {
-  test("maps criteria to discover query", () => {
-    const ids = new Map([["Comedy", 35], ["Horror", 27], ["Crime", 80]]);
-    const p = buildDiscoverParams(
-      { genres: ["Comedy", "Crime"], matchAll: false, excludeGenres: ["Horror"], runtime: { max: 100 }, year: { min: 2010 }, rating: 7, page: 2 },
-      ids,
-      { language: "en-US", sortBy: "popularity.desc", minVotes: 100 }
-    );
+  test("Phase 1 maps to the discover query; certification and platforms only when set", () => {
+    const o = { language: "en-US", minVotes: 100 };
+    const c = { excludeGenres: ["Horror"], runtime: { min: 60, max: 100 }, year: {} };
+    const p = buildDiscoverParams({ ...c, certificationLte: "PG", watch: { region: "NL", providers: [8, 337] } }, new Map([["Horror", 27]]), o);
     expect(p).toMatchObject({
-      with_genres: "35|80", without_genres: "27", "with_runtime.lte": "100",
-      "primary_release_date.gte": "2010-01-01", "vote_average.gte": "7", "vote_count.gte": "100", page: "2",
-    });
-  });
-
-  test("named genres are combined with AND, alternatives with OR", () => {
-    const ids = new Map([["Romance", 10749], ["Comedy", 35]]);
-    const o = { language: "en-US", sortBy: "popularity.desc", minVotes: 100 };
-    const c = { genres: ["Romance", "Comedy"], excludeGenres: [], runtime: {}, year: {}, page: 1 };
-    expect(buildDiscoverParams({ ...c, matchAll: true }, ids, o).with_genres).toBe("10749,35");
-    expect(buildDiscoverParams({ ...c, matchAll: false }, ids, o).with_genres).toBe("10749|35");
-  });
-
-  test("Phase 1 adds certification and subscription platforms only when set", () => {
-    const o = { language: "en-US", sortBy: "popularity.desc", minVotes: 100 };
-    const c = { genres: [], matchAll: false, excludeGenres: [], runtime: {}, year: {}, page: 1 };
-    const p = buildDiscoverParams({ ...c, certificationLte: "PG", watch: { region: "NL", providers: [8, 337] } }, new Map(), o);
-    expect(p).toMatchObject({
+      without_genres: "27", "with_runtime.gte": "60", "with_runtime.lte": "100", "vote_count.gte": "100",
+      sort_by: "primary_release_date.asc",
       certification_country: "US", "certification.lte": "PG",
       watch_region: "NL", with_watch_providers: "8|337", with_watch_monetization_types: "flatrate",
     });

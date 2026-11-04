@@ -10,14 +10,28 @@ export const isDebug = () => !!(globalThis as any).DME_DEBUG || !!(globalThis as
 /** Per-turn timing totals per stage, filled by `timed` and printed once per turn by `flushTimings`. */
 const timings = new Map<string, { ms: number; calls: number }>();
 
+function addTiming(stage: string, t0: number) {
+  const cur = timings.get(stage) ?? { ms: 0, calls: 0 };
+  timings.set(stage, { ms: cur.ms + performance.now() - t0, calls: cur.calls + 1 });
+}
+
 /** Runs `fn` and adds its duration (and call count) to the current turn's total for `stage`. */
 export async function timed<T>(stage: string, fn: () => Promise<T>): Promise<T> {
   const t0 = performance.now();
   try {
     return await fn();
   } finally {
-    const cur = timings.get(stage) ?? { ms: 0, calls: 0 };
-    timings.set(stage, { ms: cur.ms + performance.now() - t0, calls: cur.calls + 1 });
+    addTiming(stage, t0);
+  }
+}
+
+/** `timed` for synchronous work (ranking the pool). */
+export function timedSync<T>(stage: string, fn: () => T): T {
+  const t0 = performance.now();
+  try {
+    return fn();
+  } finally {
+    addTiming(stage, t0);
   }
 }
 

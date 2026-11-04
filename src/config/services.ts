@@ -54,9 +54,8 @@ export const llmBackends: LlmBackendConfig[] = [
   { name: "local", service: "localLlm", model: "qwen2.5:7b-instruct", timeoutMs: 60_000 },
 ];
 
-/** Semantic ranking of candidates. Set `enabled: false` to rank without embeddings. */
+/** Embeddings: the catalogue (ahead of time) and the wish and avoid texts (every turn). Ranking needs them. */
 export const embeddings = {
-  enabled: true,
   service: "localOllama" as ServiceName,
   path: "/embed",
   /** Chosen in the spike (todo.md): by far the strongest raw similarity of the models tried. 2,560 dims. */

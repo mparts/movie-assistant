@@ -7,7 +7,7 @@ import { settings } from "./settings";
 
 const thisYear = new Date().getFullYear();
 /** The earliest year that still counts as "recent". */
-const recentFrom = thisYear - settings.adjust.recentYears;
+const recentFrom = thisYear - settings.years.recentYears;
 
 const openingByCompany: Record<Company, string> = {
   alone: "A movie night just for you, nice. What are you in the mood for?",
@@ -36,9 +36,9 @@ export const notices = {
     "You could not process what the user just said because of a technical problem; ask them to repeat it.",
   seedNotFound: (title: string) => `No movie called "${title}" was found in the database.`,
   dbUnreachable: "The movie database could not be reached.",
-  restarted: "The user asked to start over, so earlier preferences are forgotten.",
-  genresRelaxed: (genres: string[]) =>
-    `Hardly any movies are ${genres.join(" and ")} at once, so the suggestions are now movies with any of these genres.`,
+  timeInSettings:
+    "The user asked about the movie's length. The time limit is part of tonight's settings and every candidate already fits it; to change it they press \"Change tonight's settings\".",
+  personNotInPool: (name: string) => `None of tonight's movies feature ${name}.`,
 };
 
 /** Turns one utterance into structured moves. */
@@ -47,38 +47,40 @@ export const understandSystem = `You turn ONE spoken utterance from a person who
 Record only what the person actually expressed. Greetings, small talk, or questions to the assistant give {"moves":[]}.
 
 Move types:
-{"type":"prefer","genre":"<genre>"}  they want this genre; add "negated":true if they do NOT want it ("no horror")
-{"type":"prefer","mood":"<word>"}  a mood word when no single genre fits: exciting, funny, scary, romantic, feel-good, dark, mind-bending, family. Use only these mood words; any other feeling ("goofy", "cozy") is a vibe
-{"type":"constrain","slot":"runtime|year|rating|language","op":"lte|gte|eq","value":<number, or language name>}  runtime in minutes, year as a 4-digit number, rating 0-10
-{"type":"adjust","dimension":"tone|runtime|era|rating","direction":"<word>"}  a relative request about what was just suggested: funnier, scarier, shorter, longer, newer, older, better
-{"type":"like","title":"<movie title>"}  they name a movie they love or want something similar to
+{"type":"wish","text":"<description>"}  what they want to watch, written as ONE short description of the movie (its story, mood, feel, setting), like a blurb. Whenever their taste changes, write the WHOLE updated wish: start from "whatWeKnow.wish" (if any) and fold in what they just said, keeping what still holds. Never put negations in it ("no", "not", "without", "non-"), and never a genre or person they don't want: those go in "avoid", a negated genre or a negated person instead. Relative requests about the last suggestion ("funnier", "less dark", "more action") also rewrite the wish
+{"type":"avoid","text":"<short phrase>"}  something they do NOT want that is not a genre and not a person, written positively as the thing itself: "princesses", "sad endings", "gore", "christmas"
+{"type":"prefer","genre":"<genre>"}  they name a genre they want; add "negated":true if they do NOT want it ("no horror")
+{"type":"person","name":"<full name>"}  they want an actor or director ("something with Tom Hanks", "a Nolan movie"); add "negated":true if they do NOT want them
+{"type":"like","title":"<movie title>"}  they name a movie they love or want something similar to ("something like X"): ALWAYS record it, also next to other moves
+{"type":"constrain","slot":"year|language|runtime","op":"lte|gte|eq","value":<number, or language name>}  year as a 4-digit number ("newer than that" = gte the suggested movie's year); runtime in minutes, also for "shorter" or "longer" without a number (your best guess)
 {"type":"seen","title":"<optional>"}  they already watched a movie; omit title if they mean the one just suggested
 {"type":"reject","title":"<optional>"}  they don't want that particular movie; omit title if they mean the one just suggested
-{"type":"retract","slot":"runtime|year|rating|language|genres|dislikes|vibe|all"}  they drop an earlier requirement ("dislikes" = genres they said to avoid, "genres" = genres they want)
+{"type":"retract","slot":"wish|genres|avoidGenres|avoid|people|year|language"}  they drop an earlier requirement
 {"type":"accept"}  they take the movie the assistant just suggested: "yes", "this one", "let's watch it". Never use "like" or "seen" for that
-{"type":"vibe","text":"<short phrase>"}  a loose taste or feeling that is not a genre, in their own sense: "cozy", "makes me think", "watching with my dad", "slow burn", "nothing too heavy"
-{"type":"restart"}  they want to start over
 
-Genres are exactly: ${GENRES.join(", ")}.
+Genres are exactly: ${GENRES.join(", ")}. A mood or feeling ("funny", "scary", "cozy") is NOT a genre move: it goes in the wish.
 Today's year is ${thisYear}. "Recent" or "the last few years" means ${recentFrom} or later.
-Use the conversation and the known state to resolve "that", "it", "the first one". Several moves per utterance are fine. Speech recognition may mishear titles: if a title looks like a misheard movie, write the most likely real title.
-The assistant's last turn is context, not the person's words: never record something only the assistant said, including the options it offered. If the person picks one ("the second one", "yeah, that one"), record that option; if they answer without choosing ("no idea", "you decide"), record nothing. A "yes" to a question that proposed something other than a movie means that thing: record the move that carries it out. A "no" belongs only to the words right after it: "no, not that one, something funnier" rejects the movie and asks for funnier; it does not avoid comedy.
+Use the conversation and the known state to resolve "that", "it", "the first one". Several moves per utterance are fine. Speech recognition may mishear titles and names: if one looks misheard, write the most likely real title or name.
+The assistant's last turn is context, not the person's words: never record something only the assistant said, including the options it offered. If the person picks one ("the second one", "yeah, that one"), record that option; if they answer without choosing ("no idea", "you decide"), record nothing. A "yes" to a question that proposed something other than a movie means that thing: record the move that carries it out. A "no" belongs only to the words right after it: "no, not that one, something funnier" rejects the movie and makes the wish funnier; it does not avoid comedy.
 
 Examples:
-"I only have about ninety minutes" -> {"moves":[{"type":"constrain","slot":"runtime","op":"lte","value":90}]}
-"something cozy to watch with my girlfriend" -> {"moves":[{"type":"vibe","text":"cozy"},{"type":"vibe","text":"date night"}]}
+"something cozy to watch with my girlfriend" -> {"moves":[{"type":"wish","text":"A cozy, warm romantic movie for a relaxed date night."}]}
+(whatWeKnow.wish is "A cozy, warm romantic movie for a relaxed date night.") "maybe a bit funny too" -> {"moves":[{"type":"wish","text":"A cozy, funny romantic comedy for a relaxed date night."}]}
+"an adventure for the kids, but nothing with princesses" -> {"moves":[{"type":"wish","text":"An exciting family adventure that kids will love."},{"type":"avoid","text":"princesses"}]}
 "no horror please, and something recent" -> {"moves":[{"type":"prefer","genre":"Horror","negated":true},{"type":"constrain","slot":"year","op":"gte","value":${recentFrom}}]}
 "I loved Knives Out" -> {"moves":[{"type":"like","title":"Knives Out"}]}
-"something quick" -> {"moves":[{"type":"constrain","slot":"runtime","op":"lte","value":100}]}
+"something like Arrival, maybe even with Amy Adams" -> {"moves":[{"type":"like","title":"Arrival"},{"type":"person","name":"Amy Adams"}]}
+"anything but horror, I can't sleep after those" -> {"moves":[{"type":"prefer","genre":"Horror","negated":true}]}
+"anything with Keanu Reeves? but please no Adam Sandler" -> {"moves":[{"type":"person","name":"Keanu Reeves"},{"type":"person","name":"Adam Sandler","negated":true}]}
+"I only have about ninety minutes" -> {"moves":[{"type":"constrain","slot":"runtime","op":"lte","value":90}]}
+"please, nothing with Will Ferrell" -> {"moves":[{"type":"person","name":"Will Ferrell","negated":true}]}
 "I've already seen that one" -> {"moves":[{"type":"seen"}]}
-"nah, not feeling that one" -> {"moves":[{"type":"reject"}]}
-"it isn't even christmas" (after a christmas movie was suggested) -> {"moves":[{"type":"reject"},{"type":"vibe","text":"not christmassy"}]}
-"hmm, can it be funnier?" -> {"moves":[{"type":"adjust","dimension":"tone","direction":"funnier"}]}
+"it isn't even christmas" (after a christmas movie was suggested) -> {"moves":[{"type":"reject"},{"type":"avoid","text":"christmas"}]}
 "hi, how are you?" -> {"moves":[]}
-(the assistant had asked "more of a cozy night, or something with some action?") "the cozy one, definitely" -> {"moves":[{"type":"vibe","text":"cozy"}]}
+(the assistant had asked "more of a cozy night, or something with some action?") "the cozy one, definitely" -> {"moves":[{"type":"wish","text":"A cozy, heartwarming feel-good movie."}]}
 (same question) "hmm, no idea, you pick" -> {"moves":[]}
-(a movie was just suggested) "nope, not that one... got anything funnier?" -> {"moves":[{"type":"reject"},{"type":"adjust","dimension":"tone","direction":"funnier"}]}
-(the assistant had asked "want me to drop the horror ban?") "yes, go for it" -> {"moves":[{"type":"retract","slot":"dislikes"}]}
+(a movie was just suggested; whatWeKnow.wish is "A light romantic movie for a date night.") "nope, not that one... got anything funnier?" -> {"moves":[{"type":"reject"},{"type":"wish","text":"A funny, light romantic comedy for a date night."}]}
+(the assistant had asked "want me to drop the horror ban?") "yes, go for it" -> {"moves":[{"type":"retract","slot":"avoidGenres"}]}
 (a movie was just suggested) "ok that sounds great, let's watch it tonight" -> {"moves":[{"type":"accept"}]}`;
 
 /** Jake: decides what to say and which candidate (if any) to suggest. */
@@ -107,7 +109,7 @@ Reply with ONLY a JSON object: {"say": "<what you say aloud>", "recommend": <can
 export const respondModes = {
   recommend: "The conversation is ready for a recommendation. You may choose a candidate if appropriate.",
   clarify:
-    "CLARIFY MODE: You have just suggested two movies in a row, so do NOT suggest, name, or hint at any movie now. Briefly acknowledge what they said, then ask exactly ONE question to find out what is missing. Prefer offering to drop or loosen one specific thing from whatWeKnow (one of the wantedGenres, the runtime limit, or the year range), or ask what they would change about the last suggestions. Output recommend:null.",
+    "CLARIFY MODE: You have just suggested two movies in a row, so do NOT suggest, name, or hint at any movie now. Briefly acknowledge what they said, then ask exactly ONE question to find out what is missing. Prefer offering to drop or loosen one specific thing from whatWeKnow (a wanted genre, a year range, or something they asked to avoid; the time limit is tonight's setting), or ask what they would change about the last suggestions. Output recommend:null.",
   wrapup:
     "WRAP-UP MODE: The person has just accepted the movie named in \"acceptedMovie\". In one or two warm sentences, confirm the choice (one short, true reason from its entry is fine) and wish them a good watch. Do NOT suggest another movie and do NOT ask a question. Output recommend:null.",
   explore:

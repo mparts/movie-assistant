@@ -31,39 +31,47 @@ export function openCatalogue(): Catalogue {
 export interface EnsureOptions {
   /** Embedding progress (the catalogue script prints it). */
   onProgress?: (done: number, total: number) => void;
-  onKeywords?: (done: number, total: number) => void;
+  onDetails?: (done: number, total: number) => void;
 }
 
+/** A record without details yet: `cast` is set (maybe empty) once a details call succeeded. */
+const needsDetails = (m: Movie | undefined) => !m || !Array.isArray(m.cast);
+
 /**
- * A vector for every movie that has an overview (movies without one are left out of the result).
- * New movies get a record, keywords and a vector, saved to disk; known ones are read from the copy.
+ * The catalogue's copy of every movie that has an overview, with its vector (movies without one are left out).
+ * Fresh TMDB fields (votes, rating) win over the stored ones; details (runtime, credits) come from the copy.
+ * New movies get details, keywords and a vector, saved to disk.
  */
 export async function ensureVectors(
   movies: Movie[],
   c: Catalogue,
   tmdb: TmdbClient,
   opts: EnsureOptions = {}
-): Promise<{ vectors: Map<number, Float32Array>; embedded: number }> {
+): Promise<{ movies: Movie[]; vectors: Map<number, Float32Array>; embedded: number }> {
   const withText = movies.filter((m) => m.overview?.trim());
 
-  // Records: keep the newest copy of each movie; save only when a movie is new to the catalogue.
-  let newRecords = 0;
+  // Records: merge what TMDB just returned into the stored copy (which may hold details).
+  let changed = 0;
   for (const m of withText) {
-    if (!c.records.has(m.id)) newRecords++;
-    const { runtime: _, ...rest } = m; // runtimes live in their own cache
-    c.records.set(m.id, rest);
+    if (!c.records.has(m.id)) changed++;
+    const fresh = Object.fromEntries(Object.entries(m).filter(([, v]) => v !== undefined)) as Partial<Movie>;
+    c.records.set(m.id, { ...c.records.get(m.id), ...fresh } as Movie);
   }
 
-  // Keywords for movies seen for the first time. A failed request is retried next time (the movie is embedded
-  // without keywords now, and again once its keywords arrive, because its text changes).
-  const needKeywords = withText.filter((m) => !Array.isArray(c.keywords[m.id]));
-  for (let i = 0; i < needKeywords.length; i += 1000) {
-    const chunk = needKeywords.slice(i, i + 1000);
-    for (let j = 0; j < chunk.length; j += settings.search.walkConcurrency) {
+  // Details (runtime, credits, keywords) for movies that have none yet. A failed request is retried next time:
+  // the movie is embedded without keywords now, and again once they arrive, because its text changes.
+  const todoDetails = withText.filter((m) => needsDetails(c.records.get(m.id)));
+  const n = settings.search.walkConcurrency;
+  for (let i = 0; i < todoDetails.length; i += 1000) {
+    const chunk = todoDetails.slice(i, i + 1000);
+    for (let j = 0; j < chunk.length; j += n) {
       await Promise.all(
-        chunk.slice(j, j + settings.search.walkConcurrency).map(async (m) => {
+        chunk.slice(j, j + n).map(async (m) => {
           try {
-            c.keywords[m.id] = await tmdb.keywords(m.id);
+            const { keywords, ...details } = await tmdb.details(m.id);
+            c.keywords[m.id] = keywords;
+            c.records.set(m.id, { ...c.records.get(m.id)!, ...details });
+            changed++;
           } catch {
             /* retried next time */
           }
@@ -71,7 +79,8 @@ export async function ensureVectors(
       );
     }
     writeJsonAtomic(cat.keywordsPath, c.keywords, "keyword cache");
-    opts.onKeywords?.(Math.min(i + 1000, needKeywords.length), needKeywords.length);
+    writeJsonAtomic(cat.recordsPath, { entries: [...c.records.values()] }, "catalogue");
+    opts.onDetails?.(Math.min(i + 1000, todoDetails.length), todoDetails.length);
   }
 
   // Vectors for new or changed texts.
@@ -93,14 +102,17 @@ export async function ensureVectors(
     }
   }
 
-  if (newRecords || todo.length) writeJsonAtomic(cat.recordsPath, { entries: [...c.records.values()] }, "catalogue");
+  if (changed && !todoDetails.length) writeJsonAtomic(cat.recordsPath, { entries: [...c.records.values()] }, "catalogue");
 
   const vectors = new Map<number, Float32Array>();
+  const out: Movie[] = [];
   for (const m of withText) {
     const v = c.store.get(m.id);
-    if (v) vectors.set(m.id, v);
+    if (!v) continue;
+    vectors.set(m.id, v);
+    out.push(c.records.get(m.id)!);
   }
-  return { vectors, embedded: todo.length };
+  return { movies: out, vectors, embedded: todo.length };
 }
 
 /**

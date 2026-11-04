@@ -12,60 +12,30 @@ export const initialIS = (intake: Intake): IS => ({
   shared: {},
   history: [],
   readiness: { meaningfulTurns: 0, evidence: [] },
-  prefs: { genres: [], required: [], seeds: [] },
-  vibe: [],
-  constraints: { runtime: {}, year: {} },
-  dislikes: { genres: [] },
+  wish: "",
+  genres: [],
+  avoidGenres: [],
+  avoid: [],
+  people: [],
+  seeds: [],
+  constraints: { year: {} },
   candidates: [],
   recommended: [],
   rejected: [],
   recommendStreak: 0,
-  search: { status: "idle", page: 1, noMore: false },
 });
 
-/** Taste = a genre/mood, a movie they like, or a vibe. Limits and dislikes alone are not taste. */
-export const hasTaste = (is: IS) => is.prefs.genres.length > 0 || is.prefs.seeds.length > 0 || is.vibe.length > 0;
+/** Taste = a wish, a wanted genre, a liked movie, or a wanted person. Filters and dislikes alone are not taste. */
+export const hasTaste = (is: IS) =>
+  !!is.wish || is.genres.length > 0 || is.seeds.length > 0 || is.people.some((p) => !p.negated);
 
-/** Anything at all worth searching on. */
-export const hasSignal = (is: IS): boolean => {
-  const c = is.constraints;
-  return (
-    hasTaste(is) ||
-    is.dislikes.genres.length > 0 ||
-    c.runtime.min !== undefined || c.runtime.max !== undefined ||
-    c.year.min !== undefined || c.year.max !== undefined ||
-    c.rating !== undefined || c.language !== undefined
-  );
-};
-
-export function criteriaFromIS(is: IS, page: number = is.search.page): SearchCriteria {
-  const criteria: SearchCriteria = {
-    // Named genres are combined (AND); with none named, the mood/liked-movie genres are alternatives (OR).
-    genres: is.prefs.required.length ? is.prefs.required : is.prefs.genres,
-    matchAll: is.prefs.required.length > 0,
-    excludeGenres: is.dislikes.genres,
-    runtime: is.constraints.runtime,
-    year: is.constraints.year,
-    rating: is.constraints.rating,
-    language: is.constraints.language,
-    page,
-  };
-  return narrowByIntake(criteria, is.intake);
-}
-
-/** Phase 1 limits on top of the chat's own: the chat can only narrow them, never widen them. */
-function narrowByIntake(c: SearchCriteria, { profile, tonight }: Intake): SearchCriteria {
-  const limit = tonight.maxMinutes;
-  const max = limit === undefined ? c.runtime.max : Math.min(limit, c.runtime.max ?? limit);
-  // Never below the floor for real movies (no shorts). A chat minimum above the Phase 1 limit would leave nothing,
-  // so it falls back to that floor.
-  const floor = settings.intake.minMinutes;
-  const wanted = max !== undefined && c.runtime.min !== undefined && c.runtime.min > max ? floor : Math.max(floor, c.runtime.min ?? floor);
-  const min = max !== undefined ? Math.min(wanted, max) : wanted;
+/** Phase 1 as TMDB filters: the pool is every movie that passes them. The chat can only narrow this, locally. */
+export function poolCriteria({ profile, tonight }: Intake): SearchCriteria {
   return {
-    ...c,
-    excludeGenres: [...new Set([...c.excludeGenres, ...tonight.avoidGenres])],
-    runtime: { ...(min !== undefined && { min }), ...(max !== undefined && { max }) },
+    excludeGenres: tonight.avoidGenres,
+    // Never below the floor for real movies (no shorts).
+    runtime: { min: settings.intake.minMinutes, ...(tonight.maxMinutes !== undefined && { max: tonight.maxMinutes }) },
+    year: {},
     certificationLte: certificationFor(tonight.youngestAge),
     watch: profile.platforms.length ? { region: profile.country, providers: profile.platforms } : undefined,
   };
@@ -73,7 +43,7 @@ function narrowByIntake(c: SearchCriteria, { profile, tonight }: Intake): Search
 
 /** Compact view of what the system currently believes, for the LLM prompts. Empty fields are omitted. */
 export function stateSummary(is: IS): Record<string, unknown> {
-  const { runtime, year, rating, language } = is.constraints;
+  const { year, language } = is.constraints;
   const { profile, tonight } = is.intake;
   const o: Record<string, unknown> = {
     // From the settings form: fixed for this conversation, never asked again.
@@ -86,32 +56,30 @@ export function stateSummary(is: IS): Record<string, unknown> {
       streamingServices: profile.platforms.length || "none (any movie)",
     },
   };
-  if (is.prefs.genres.length) o.wantedGenres = is.prefs.genres;
-  if (is.prefs.seeds.length) o.likesMoviesLike = is.prefs.seeds.map((m) => m.title);
-  if (is.vibe.length) o.vibe = is.vibe;
-  if (is.dislikes.genres.length) o.avoidGenres = is.dislikes.genres;
-  if (runtime.max !== undefined) o.maxRuntimeMinutes = runtime.max;
-  if (runtime.min !== undefined) o.minRuntimeMinutes = runtime.min;
+  if (is.wish) o.wish = is.wish;
+  if (is.genres.length) o.wantedGenres = is.genres;
+  if (is.seeds.length) o.likesMoviesLike = is.seeds.map((m) => m.title);
+  const wanted = is.people.filter((p) => !p.negated).map((p) => p.name);
+  const unwanted = is.people.filter((p) => p.negated).map((p) => p.name);
+  if (wanted.length) o.wantedPeople = wanted;
+  if (is.avoidGenres.length) o.avoidGenres = is.avoidGenres;
+  if (is.avoid.length) o.avoid = is.avoid;
+  if (unwanted.length) o.avoidPeople = unwanted;
   if (year.min !== undefined) o.fromYear = year.min;
   if (year.max !== undefined) o.toYear = year.max;
-  if (rating !== undefined) o.minRating = rating;
   if (language) o.originalLanguage = language;
   return o;
 }
 
 export const lastSuggested = (is: IS): string | null => last(is.recommended)?.title ?? null;
 
-/** The user's positive taste as text: the query for semantic ranking, and context for the LLM. */
+/** The user's positive taste as one line, for Jake. */
 export function tasteProfile(is: IS): string | null {
-  const chars = settings.dialogue.descriptionChars.seed;
   const parts: string[] = [];
-  if (is.vibe.length) parts.push(`Desired feeling, atmosphere or themes: ${is.vibe.join("; ")}.`);
-  if (is.prefs.genres.length) parts.push(`Preferred genres: ${is.prefs.genres.join(", ")}.`);
-  if (is.prefs.seeds.length) {
-    const liked = is.prefs.seeds.map(
-      (m) => `${m.title} (${m.genres.join(", ")})${m.overview ? `: ${m.overview.slice(0, chars)}` : ""}`
-    );
-    parts.push(`Movies the user likes: ${liked.join("; ")}.`);
-  }
+  if (is.wish) parts.push(`They want: ${is.wish}`);
+  if (is.genres.length) parts.push(`Genres: ${is.genres.join(", ")}.`);
+  if (is.seeds.length) parts.push(`Movies they like: ${is.seeds.map((m) => m.title).join("; ")}.`);
+  const wanted = is.people.filter((p) => !p.negated).map((p) => p.name);
+  if (wanted.length) parts.push(`With: ${wanted.join(", ")}.`);
   return parts.join(" ") || null;
 }

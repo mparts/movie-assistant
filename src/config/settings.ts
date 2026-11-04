@@ -52,19 +52,6 @@ export const settings = {
     respond: { temperature: 0.7, maxTokens: 1200, purpose: "NLG", prefer: undefined as string[] | undefined },
   },
 
-  /** On-disk cache of movie-description vectors (Node scripts only; the browser keeps them in memory). */
-  embeddingCache: {
-    path: ".cache/embeddings.json",
-    /** Oldest vectors are dropped beyond this (about 6-8 KB each as JSON). */
-    maxEntries: 5000,
-  },
-
-  /** On-disk cache of movie runtimes (Node scripts only). About 15 bytes per entry. */
-  runtimeCache: {
-    path: ".cache/runtimes.json",
-    maxEntries: 20000,
-  },
-
   /**
    * The movie catalogue embedded ahead of time (`npm run embed-catalogue`): every movie a Phase 1 pool could hold.
    * Shorter than `intake.minMinutes` or fewer votes than `minVotes` is left out.
@@ -97,23 +84,12 @@ export const settings = {
 
   search: {
     language: "en-US",
-    sortBy: "popularity.desc",
-    /** Keeps obscure titles out. */
+    /** Keeps obscure titles out of the pool. */
     minVotes: 100,
-    /** TMDB pages (20 movies each) fetched per batch; more = bigger pool but slower. */
-    pagesPerBatch: 3,
-    /** Pages of results a session may draw from, visited in a per-session random order. */
-    pageWindow: 12,
-    /**
-     * Fewer TMDB results than this for a combination of named genres ("Western" AND "Music")
-     * → search for any of them instead, and tell the user.
-     */
-    thinPool: 20,
-    /** How many batches to try when the pool runs dry. */
-    maxBatches: 5,
-    runtimeLookupConcurrency: 10,
-    /** Parallel TMDB requests when walking every page of a query (the pool, the catalogue) or fetching keywords. */
+    /** Parallel TMDB requests when walking every page of a query (the pool, the catalogue) or fetching details. */
     walkConcurrency: 20,
+    /** Top-billed actors kept per movie (for "something with Keanu Reeves" and for Jake's facts). */
+    castShown: 5,
     /** TMDB answers 429 when called too fast: wait this long, then retry this many times before giving up. */
     retryDelayMs: 1000,
     rateLimitRetries: 3,
@@ -125,43 +101,26 @@ export const settings = {
     minPool: 30,
   },
 
+  /**
+   * Ranking tonight's pool, every turn (core/ranking.ts). Each term is a percentile within the movies still eligible,
+   * so the weights compare like with like. Chosen in the spike (todo.md, step 5), checked by `npm run rank-bench`.
+   */
   ranking: {
-    /** Weighted baseline; weights sum to 1. */
-    weights: { genres: 0.4, similarity: 0.3, rating: 0.2, runtime: 0.1 },
+    /** Similarity to the wish (or to a liked movie, whichever is higher), genres they named, number of votes. */
+    weights: { semantic: 0.8, genres: 0.1, popularity: 0.1 },
     /**
-     * Subtracted from the score of a movie that resembles one the user turned down ("no", not "already seen"):
-     * this times its similarity (0..1) to the most similar rejected movie, judged on the description and on genres
-     * the user did NOT ask for. Only reorders; nothing is excluded.
-     * Kept apart from `weights` so those still sum to 1.
+     * Penalties hit only the movies MOST similar to something unwanted: `weight` at the top, fading to 0 at
+     * percentile `from`. An avoid text ("princesses") hits the top 5%; a turned-down movie its closest 10%.
      */
-    rejectionPenalty: 0.3,
-    /** Share of the final score taken by embeddings when they are available. */
-    semanticWeight: 0.55,
-    /** Bayesian shrinkage: a 9/10 with 3 votes shouldn't outrank an 8/10 with 10,000 votes. */
-    ratingPrior: { votes: 250, mean: 6.5 },
-    /** Similarity to a liked movie: genre overlap vs. description overlap. */
-    similarityMix: { genres: 0.6, text: 0.4 },
-    /** Score for "no information" (unknown runtime, no preference, all-equal semantic scores). */
-    neutral: 0.5,
-    /** Soft runtime fit: smallest half-width (minutes) of the target band, and minutes over which the fit ramps up/down. */
-    runtimeFit: { minHalfBand: 30, rampMinutes: 60 },
+    avoid: { weight: 1, from: 0.95 },
+    reject: { weight: 0.4, from: 0.9 },
+    /** Added for a wanted actor or director: their movies come first. */
+    person: 1,
   },
 
-  /** Step sizes for relative requests ("shorter", "newer", "better") and exact ones ("about 90 minutes"). */
-  adjust: {
-    runtimeStep: 20,
-    runtimeDefaultMax: 130,
-    runtimeDefaultMin: 100,
-    runtimeFloor: 60,
-    runtimeExactTolerance: 15,
-    yearStep: 10,
+  years: {
     /** "Recent" or "the last few years" means this many years back from today. */
     recentYears: 5,
-    yearOlderStep: 15,
-    yearDefaultMin: 2000,
-    ratingStep: 0.5,
-    ratingDefault: 6.5,
-    ratingCap: 8.5,
   },
 
   speech: {

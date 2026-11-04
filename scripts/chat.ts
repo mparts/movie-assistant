@@ -17,8 +17,6 @@ import { dme } from "../src/dialogue/dme";
 import { nlg } from "../src/dialogue/nlg";
 import { createClients } from "../src/services";
 import { orderByPreference } from "../src/services/llm";
-import { createFileStore } from "../src/services/embeddingStore";
-import { createRuntimeFileStore } from "../src/services/runtimeStore";
 import { formText as T } from "../src/config/prompts";
 import { poolCheck, type Pool } from "../src/core/pool";
 import { nodeVectorSource } from "../src/services/catalogue";
@@ -30,8 +28,6 @@ const clients = createClients("upstream", env, {
   // After every LLM call: what it was for, who answered, how long, and who failed first.
   onLlmAnswer: (a) =>
     console.log(`  [${a.purpose ?? "LLM"}] ${a.backend} (${a.model}) ${Math.round(a.ms)}ms${a.failed.length ? `, after ${a.failed.join(", ")} failed` : ""}`),
-  embeddingStore: createFileStore(settings.embeddingCache.path, settings.embeddingCache.maxEntries),
-  runtimeStore: createRuntimeFileStore(settings.runtimeCache.path, settings.runtimeCache.maxEntries),
 });
 const vectorsFor = nodeVectorSource(clients.tmdb);
 const enabledBackends = llmBackends.filter((b) => b.enabled !== false);
@@ -103,7 +99,7 @@ const machine = setup({
   invoke: {
     src: "dme",
     id: "dme",
-    input: ({ self }): DMEContext => ({ parentRef: self, ...clients, pool, is: initialIS(intake) }),
+    input: ({ self }): DMEContext => ({ parentRef: self, ...clients, vectorsFor, pool, vectors: new Map(), is: initialIS(intake) }),
   },
   on: {
     USER: {

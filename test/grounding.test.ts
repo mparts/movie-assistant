@@ -77,13 +77,19 @@ describe("wrap-up with a duplicate title", () => {
 
 describe("B: moves the user's words do not support are dropped", () => {
   const jake = "Back to the Future has that fun, goofy vibe with a sweet hint of romance, perfect for a light date night.";
-  test("vibes copied from the assistant's last turn are dropped; the user's own are kept", () => {
-    const copied: Move[] = [{ type: "vibe", text: "goofy" }, { type: "vibe", text: "date night" }];
-    expect(ground(copied, "yes this one", jake, "Back to the Future")).toEqual([]);
+  test("a wish made of the assistant's words is dropped; the user's own (or a bare yes to it) is kept", () => {
+    const copied: Move[] = [{ type: "wish", text: "A goofy movie for a light date night." }];
+    expect(ground(copied, "the second one", jake, null)).toEqual([]);
     expect(ground(copied, "goofy sounds right, a date night", jake, null)).toEqual(copied);
-    expect(ground([{ type: "vibe", text: "cozy" }], "something cozy", jake, null)).toHaveLength(1);
+    expect(ground(copied, "yes!", jake, null)).toEqual(copied);
+    // Only the words a rewrite adds count: the old wish's words are not "copied".
+    expect(ground([{ type: "wish", text: "A cozy, funny movie." }], "funnier", jake, null, "A cozy movie.")).toHaveLength(1);
   });
 
+  test("a person needs their name in the user's words", () => {
+    expect(ground([{ type: "person", name: "Michael J. Fox" }], "sounds fun", jake, null)).toEqual([]);
+    expect(ground([{ type: "person", name: "Christopher Nolan" }], "a nolan movie", undefined, null)).toHaveLength(1);
+  });
 
   test("a like needs the title in the user's words, allowing a misheard letter", () => {
     expect(ground([{ type: "like", title: "Back to the Future" }], "yes this one", jake, "Back to the Future")).toEqual([]);
@@ -95,7 +101,7 @@ describe("B: moves the user's words do not support are dropped", () => {
 });
 
 describe("C: a negated genre needs a 'no' right before it", () => {
-  const neg = (genre: string, mood?: string): Move[] => [{ type: "prefer", genre, mood, negated: true }];
+  const neg = (genre: string): Move[] => [{ type: "prefer", genre, negated: true }];
   test("the chat.log case: 'no' belongs to 'this', not to funny", () => {
     expect(ground(neg("Comedy"), "hhmm... no I do not like this.. maybe something more funny", undefined, null)).toEqual([]);
   });
@@ -107,7 +113,6 @@ describe("C: a negated genre needs a 'no' right before it", () => {
       ["Comedy", "I don't like comedies"],
       ["Horror", "I can't stand scary movies"],
       ["Romance", "not really in the mood for romance"],
-      ["Comedy", "nothing too funny"],
     ] as const)
       expect(ground(neg(genre), said, undefined, null), said).toHaveLength(1);
   });
@@ -130,9 +135,9 @@ describe("a zero or negative limit is dropped", () => {
 
 describe("D: retract slots named as the NLU sees them", () => {
   test.each([
-    ["avoidGenres", "dislikes"],
+    ["dislikes", "avoidGenres"],
     ["wantedGenres", "genres"],
-    ["maxRuntimeMinutes", "runtime"],
+    ["avoidPeople", "people"],
   ])("%s → %s", async (given, real) => {
     const out = await understand(llmSays({ moves: [{ type: "retract", slot: given }] }), "drop that", freshIS());
     expect(out).toEqual([{ type: "retract", slot: real }]);

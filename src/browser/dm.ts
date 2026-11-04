@@ -12,13 +12,12 @@ import { poolCheck, type Pool } from "../core/pool";
 import { initialIS } from "../core/state";
 import type { DMContext, DMEvent, NextMovesEvent } from "../core/types";
 import { createClients } from "../services";
-import { fetchPoolVectors, loadBrowserStores } from "../services/browserStores";
+import { fetchPoolVectors } from "../services/poolVectorsClient";
 import { loadPool } from "../services/pool";
 import { dme } from "../dialogue/dme";
 import { nlg } from "../dialogue/nlg";
 
-// The same on-disk caches as the typed chat, through the dev server (loaded once, before the first search).
-const clients = createClients("proxy", {}, await loadBrowserStores());
+const clients = createClients("proxy");
 
 const speechSettings: Settings = {
   azureCredentials: { endpoint: azure.tokenEndpoint, key: import.meta.env.VITE_AZURE_KEY },
@@ -140,8 +139,10 @@ const dmMachine = setup({
               parentRef: self,
               tmdb: context.tmdb,
               llm: context.llm,
-              embedder: context.embedder,
+              embedQuery: context.embedQuery,
+              vectorsFor: fetchPoolVectors,
               pool: context.pool as Pool, // set by FindingMovies, the only way into Main
+              vectors: new Map(),
               is: context.is!, // set by INTAKE_DONE
             }),
           },

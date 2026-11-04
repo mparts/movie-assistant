@@ -11,22 +11,28 @@ const stubFor = (answers: Record<string, unknown[]>): LlmClient => ({
 });
 
 const perfect: Record<string, unknown[]> = {
-  "goofy huh? yeah let's go with that!!": [{ type: "vibe", text: "goofy" }],
-  "hhhmmm... not really... I don't like office settings": [{ type: "reject" }, { type: "vibe", text: "no office settings" }],
+  "goofy huh? yeah let's go with that!!": [{ type: "wish", text: "A goofy, light romantic comedy." }],
+  "hhhmmm... not really... I don't like office settings": [{ type: "reject" }, { type: "avoid", text: "office settings" }],
   "I was thinking a romantic comedy will be nice!!": [{ type: "prefer", genre: "Romance" }, { type: "prefer", genre: "Comedy" }],
+  "something cozy and funny for a rainy evening": [{ type: "wish", text: "A cozy, funny movie for a rainy evening." }],
+  "maybe with a bit more humor": [{ type: "wish", text: "A gritty crime thriller with a detective, with some humor." }],
+  "an adventure for the kids, but no princesses please": [{ type: "wish", text: "An exciting adventure for kids." }, { type: "avoid", text: "princesses" }],
+  "something scary with ghosts, but not gory": [{ type: "wish", text: "A creepy ghost story." }, { type: "avoid", text: "gore" }],
+  "anything with Tom Hanks?": [{ type: "person", name: "Tom Hanks" }],
+  "please nothing with Adam Sandler": [{ type: "person", name: "Adam Sandler", negated: true }],
+  "I'm in the mood for a Nolan film": [{ type: "person", name: "Christopher Nolan" }],
   "I only have an hour and a half tonight": [{ type: "constrain", slot: "runtime", op: "lte", value: 90 }],
   "anything but horror, I can't sleep after those": [{ type: "prefer", genre: "Horror", negated: true }],
   "oh I watched that one ages ago": [{ type: "seen" }],
   "nah, that's not for me": [{ type: "reject" }],
   "something along the lines of Parasite": [{ type: "like", title: "Parasite" }],
-  "actually, let's start over and forget all of that": [{ type: "restart" }],
-  "do you have anything a bit shorter than that?": [{ type: "adjust", dimension: "runtime", direction: "shorter" }],
-  "never mind the time limit, any length is fine": [{ type: "retract", slot: "runtime" }],
+  "something like Inception, maybe even by Nolan": [{ type: "like", title: "Inception" }, { type: "person", name: "Christopher Nolan" }],
+  "do you have anything a bit shorter than that?": [{ type: "constrain", slot: "runtime", op: "lte", value: 120 }],
   "only movies from the nineties please": [{ type: "constrain", slot: "year", op: "gte", value: 1990 }],
   "something from the last few years": [{ type: "constrain", slot: "year", op: "gte", value: new Date().getFullYear() - 5 }],
-  "yeap you got me... lighthearted date vibe it is!!": [{ type: "vibe", text: "lighthearted date" }],
-  "hhmm... no I do not like this.. maybe something more funny": [{ type: "reject" }, { type: "adjust", dimension: "tone", direction: "funnier" }],
-  "yes please do that!!": [{ type: "retract", slot: "avoidGenres" }], // the name the NLU is shown; normalised to "dislikes"
+  "yeap you got me... lighthearted date vibe it is!!": [{ type: "wish", text: "A lighthearted romantic comedy for a date night." }],
+  "hhmm... no I do not like this.. maybe something more funny": [{ type: "reject" }, { type: "wish", text: "A funnier romantic comedy." }],
+  "yes please do that!!": [{ type: "retract", slot: "dislikes" }], // a name the NLU may use; normalised to "avoidGenres"
   "ok that sounds great, let's watch it tonight": [{ type: "accept" }],
   "no scary stuff please": [{ type: "prefer", genre: "Horror", negated: true }],
 };

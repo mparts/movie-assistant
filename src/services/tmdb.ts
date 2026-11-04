@@ -6,64 +6,37 @@ export interface TmdbOptions {
   baseUrl: string;
   headers?: Record<string, string>;
   language: string;
-  sortBy: string;
   minVotes: number;
-  /** TMDB pages (20 movies each) fetched per search batch. */
-  pagesPerBatch: number;
-  /** Pages of results a session may draw from, in a per-session random order. */
-  pageWindow: number;
-  runtimeLookupConcurrency: number;
-  /** Parallel requests when walking every page of a query, or fetching keywords. */
+  /** Parallel requests when walking every page of a query. */
   walkConcurrency: number;
+  /** Top-billed cast kept per movie. */
+  castShown: number;
   /** Wait after a 429, and how many times to retry it before failing. */
   retryDelayMs: number;
   rateLimitRetries: number;
-  /** Where runtimes survive restarts. Without one, they are cached only in memory. */
-  store?: RuntimeStore;
 }
 
-/** Persistent storage for runtimes. Both methods must never throw: a bad cache is an empty cache. */
-export interface RuntimeStore {
-  load(): Map<number, number>;
-  save(entries: Map<number, number>): void;
-}
+/** TMDB returns nothing past page 500 of any query. */
+const MAX_PAGES = 500;
 
-type DiscoverOptions = Pick<TmdbOptions, "language" | "sortBy" | "minVotes">;
-
-function shuffle<T>(xs: T[]): T[] {
-  const a = [...xs];
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [a[i], a[j]] = [a[j], a[i]];
-  }
-  return a;
-}
-
-/** Pure: our criteria (genre NAMES) → TMDB /discover/movie query parameters. */
+/** Pure: our filters (genre NAMES) → TMDB /discover/movie query parameters, in a stable order (release date). */
 export function buildDiscoverParams(
   c: SearchCriteria,
   idByName: Map<string, number>,
-  o: DiscoverOptions
+  o: Pick<TmdbOptions, "language" | "minVotes">
 ): Record<string, string> {
-  const ids = (names: string[]) => names.flatMap((n) => (idByName.has(n) ? [idByName.get(n)!] : []));
+  const withoutIds = c.excludeGenres.flatMap((n) => (idByName.has(n) ? [idByName.get(n)!] : []));
   const p: Record<string, string> = {
     include_adult: "false",
+    include_video: "false",
     language: o.language,
-    sort_by: o.sortBy,
+    // Popularity would shift while we page through it, skipping or repeating movies.
+    sort_by: "primary_release_date.asc",
     "vote_count.gte": String(o.minVotes),
-    page: String(c.page),
   };
-  const withIds = ids(c.genres);
-  const withoutIds = ids(c.excludeGenres);
-  // TMDB has no mixed AND/OR: "35,28|53" silently becomes "35,28". So one or the other.
-  if (withIds.length) p.with_genres = withIds.join(c.matchAll ? "," : "|");
   if (withoutIds.length) p.without_genres = withoutIds.join(",");
   if (c.runtime.min !== undefined) p["with_runtime.gte"] = String(c.runtime.min);
   if (c.runtime.max !== undefined) p["with_runtime.lte"] = String(c.runtime.max);
-  if (c.year.min !== undefined) p["primary_release_date.gte"] = `${c.year.min}-01-01`;
-  if (c.year.max !== undefined) p["primary_release_date.lte"] = `${c.year.max}-12-31`;
-  if (c.rating !== undefined) p["vote_average.gte"] = String(c.rating);
-  if (c.language) p.with_original_language = c.language;
   if (c.certificationLte) {
     p.certification_country = "US";
     p["certification.lte"] = c.certificationLte;
@@ -77,14 +50,9 @@ export function buildDiscoverParams(
 }
 
 export function createTmdb(o: TmdbOptions): TmdbClient {
-  // Popularity-sorted discover always returns the same top titles. A random page order per session
-  // (fixed for the session, so repeated searches stay consistent) varies the pool between conversations.
-  const pageOrder = shuffle(Array.from({ length: o.pageWindow }, (_, i) => i + 1));
-  const runtimes = new Map<number, number>();
-  let runtimesLoaded = false;
   const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-  /** Runs `f` over `xs`, `n` at a time. */
+  /** Runs `f` over `xs`, `walkConcurrency` at a time. */
   async function pooled<T, R>(xs: T[], f: (x: T) => Promise<R>): Promise<R[]> {
     const out: R[] = [];
     for (let i = 0; i < xs.length; i += o.walkConcurrency) out.push(...(await Promise.all(xs.slice(i, i + o.walkConcurrency).map(f))));
@@ -126,66 +94,15 @@ export function createTmdb(o: TmdbOptions): TmdbClient {
     votes: r.vote_count ?? 0,
     overview: r.overview ?? "",
     posterPath: r.poster_path ?? undefined,
+    language: r.original_language ?? undefined,
   });
 
-  /** Discover results carry no runtime; look them up (concurrently, cached) so the assistant never has to guess. */
-  async function fillRuntimes(movies: Movie[]) {
-    if (!runtimesLoaded) {
-      runtimesLoaded = true;
-      for (const [id, minutes] of o.store?.load() ?? []) runtimes.set(id, minutes);
-    }
-    const todo = movies.filter((m) => !runtimes.has(m.id));
-    let next = 0;
-    await Promise.all(
-      Array.from({ length: Math.min(o.runtimeLookupConcurrency, todo.length) }, async () => {
-        while (next < todo.length) {
-          const m = todo[next++];
-          try {
-            const d = await get(`/movie/${m.id}`, { language: o.language });
-            if (typeof d.runtime === "number" && d.runtime > 0) runtimes.set(m.id, d.runtime);
-          } catch {
-            /* runtime stays unknown */
-          }
-        }
-      })
-    );
-    for (const m of movies) {
-      const r = runtimes.get(m.id);
-      if (r) m.runtime = r;
-    }
-    // Failed lookups are not in `runtimes`, so they are neither saved nor remembered: they get retried next time.
-    if (o.store && todo.some((m) => runtimes.has(m.id))) o.store.save(runtimes);
-    if (isDebug()) console.log(`[tmdb] runtimes: ${todo.length} looked up / ${movies.length} movies`);
-  }
-
   return {
-    async discover(criteria) {
-      const g = await loadGenres();
-      const params = buildDiscoverParams(criteria, g.byName, o);
-      if (isDebug()) console.log(`[tmdb] discover ${new URLSearchParams(params)}`);
-      // Page 1 doubles as a probe: it tells us how many pages this query really has.
-      const probe = await get("/discover/movie", { ...params, page: "1" });
-      const available = Math.min(probe.total_pages ?? 1, o.pageWindow);
-      const start = (criteria.page - 1) * o.pagesPerBatch;
-      const pages = pageOrder.filter((p) => p <= available).slice(start, start + o.pagesPerBatch);
-      const responses = await Promise.all(
-        pages.map((p) => (p === 1 ? probe : get("/discover/movie", { ...params, page: String(p) })))
-      );
-      const seen = new Set<number>();
-      const movies = responses
-        .flatMap((d) => d.results as any[])
-        .map((r) => toMovie(r, g.byId))
-        .filter((m) => !seen.has(m.id) && !!seen.add(m.id));
-      await fillRuntimes(movies);
-      return { movies, total: probe.total_results ?? movies.length };
-    },
     async pool(criteria) {
       const g = await loadGenres();
-      // A stable order (popularity shifts while we page through it, skipping or repeating movies).
-      const params = { ...buildDiscoverParams(criteria, g.byName, o), sort_by: "primary_release_date.asc" };
+      const params = buildDiscoverParams(criteria, g.byName, o);
       const found = new Map<number, any>();
       let pages = 0;
-      const MAX_PAGES = 500; // TMDB returns nothing past page 500 of any query
       async function walk(from: number, to: number): Promise<void> {
         const p = { ...params, "primary_release_date.gte": `${from}-01-01`, "primary_release_date.lte": `${to}-12-31` };
         const first = await get("/discover/movie", { ...p, page: "1" });
@@ -206,14 +123,17 @@ export function createTmdb(o: TmdbOptions): TmdbClient {
       if (isDebug()) console.log(`[tmdb] pool: ${found.size} movies in ${pages} pages`);
       return [...found.values()].map((r) => toMovie(r, g.byId));
     },
-    async keywords(id) {
-      try {
-        const d = await get(`/movie/${id}/keywords`);
-        return ((d.keywords ?? []) as any[]).map((k) => String(k.name));
-      } catch (e) {
-        if ((e as { status?: number }).status === 404) return [];
-        throw e;
-      }
+    async details(id) {
+      const d = await get(`/movie/${id}`, { language: o.language, append_to_response: "credits,keywords" });
+      const str = (x: unknown) => (typeof x === "string" && x.trim() ? x.trim() : undefined);
+      return {
+        runtime: typeof d.runtime === "number" && d.runtime > 0 ? d.runtime : undefined,
+        directors: ((d.credits?.crew ?? []) as any[]).filter((c) => c.job === "Director").map((c) => String(c.name)),
+        cast: ((d.credits?.cast ?? []) as any[]).slice(0, o.castShown).map((c) => String(c.name)),
+        collection: str(d.belongs_to_collection?.name),
+        tagline: str(d.tagline),
+        keywords: ((d.keywords?.keywords ?? []) as any[]).map((k) => String(k.name)),
+      };
     },
     async searchMovie(title) {
       const g = await loadGenres();

@@ -1,7 +1,6 @@
 import { SpeechStateExternalEvent } from "speechstate";
-import type { Embedder } from "../services/embeddings";
 import type { Intake } from "./intake";
-import type { Pool } from "./pool";
+import type { Pool, VectorSource } from "./pool";
 
 /** A movie as the dialogue sees it. Genres are TMDB genre *names*; only the TMDB client knows ids. */
 export interface Movie {
@@ -11,9 +10,26 @@ export interface Movie {
   genres: string[];
   rating: number;
   votes: number;
-  runtime?: number; // minutes; filled by a detail lookup for discover results
+  runtime?: number; // minutes, from the catalogue
   overview: string;
   posterPath?: string;
+  /** Original language (ISO 639-1, "en"). */
+  language?: string;
+  /** From the catalogue's details: directors, the top-billed cast, the franchise, the tagline. */
+  directors?: string[];
+  cast?: string[];
+  collection?: string;
+  tagline?: string;
+}
+
+/** What one TMDB details call adds to a movie (with its keywords, which only go into the embedded text). */
+export interface MovieDetails {
+  runtime?: number;
+  directors: string[];
+  cast: string[];
+  collection?: string;
+  tagline?: string;
+  keywords: string[];
 }
 
 export type Speaker = "usr" | "sys";
@@ -24,24 +40,25 @@ export type Turn = { speaker: Speaker; text: string };
  * The LLM never edits the information state directly: rules do, from these moves.
  */
 export type Move =
-  | { type: "prefer"; genre?: string; mood?: string; negated?: boolean }
+  /** The WHOLE updated wish, as a short description of the movie they want; never contains negations. */
+  | { type: "wish"; text: string }
+  /** Something they don't want that is not a genre ("princesses", "anything too sad"). */
+  | { type: "avoid"; text: string }
+  /** A named genre: wanted (soft), or with `negated` avoided (hard). */
+  | { type: "prefer"; genre: string; negated?: boolean }
+  /** An actor or director: wanted (their movies first), or with `negated` avoided (excluded). */
+  | { type: "person"; name: string; negated?: boolean }
   | {
       type: "constrain";
-      slot: "runtime" | "year" | "rating" | "language";
+      /** "runtime" is understood only to point the user to tonight's settings: time belongs to Phase 1. */
+      slot: "runtime" | "year" | "language";
       op: "lte" | "gte" | "eq";
       value: number | string;
-    }
-  | {
-      type: "adjust";
-      dimension: "tone" | "runtime" | "era" | "rating";
-      direction: string;
     }
   | { type: "like"; title: string } // "something like Knives Out"
   | { type: "seen"; title?: string } // no title = the movie in focus
   | { type: "reject"; title?: string }
   | { type: "retract"; slot: string }
-  | { type: "vibe"; text: string } // loose taste that isn't a genre: "cozy", "makes me think"
-  | { type: "restart" }
   | { type: "accept" } // "yes, this one": they take the movie the assistant just suggested
   | { type: "noinput" }
   | { type: "say"; text: string; movieId?: number }; // system utterance (+ the movie it recommends)
@@ -59,7 +76,7 @@ export type Action = { type: "resolve_seed"; title: string };
 
 export type Range = { min?: number; max?: number };
 
-/** Plain JSON on purpose: loggable and diffable. */
+/** Plain JSON on purpose: loggable and diffable. Tonight's movies (the pool) are a resource, not part of it. */
 export interface InformationState {
   next_moves: Move[];
   private: {
@@ -72,56 +89,50 @@ export interface InformationState {
   /** Recommendation gate: substantive user turns and distinct pieces of information. */
   readiness: { meaningfulTurns: number; evidence: string[] };
 
-  /**
-   * `genres`: every wanted genre, used for ranking. `required`: the subset the user named, which a movie must
-   * ALL have ("romantic comedy"). Mood and liked-movie genres are alternatives and stay out of `required`.
-   */
-  prefs: { genres: string[]; required: string[]; seeds: Movie[] };
-  /** loose taste descriptors, matched against movie descriptions semantically */
-  vibe: string[];
-  /** hard: sent to TMDB */
-  constraints: { runtime: Range; year: Range; rating?: number; language?: string };
-  /** hard: excluded */
-  dislikes: { genres: string[] };
+  /** What they want, as a short movie description (rewritten by the NLU whenever taste changes). Ranked semantically. */
+  wish: string;
+  /** Genres they named: a soft want. */
+  genres: string[];
+  /** Genres they don't want: excluded (tonight's avoided genres are already out of the pool). */
+  avoidGenres: string[];
+  /** Other things they don't want: a narrow penalty on the movies most similar to them. */
+  avoid: string[];
+  /** Actors and directors: wanted ones rank first, avoided ones are excluded. */
+  people: { name: string; negated: boolean }[];
+  /** Movies they love ("something like X"); never suggested back. */
+  seeds: Movie[];
+  /** Filters on the pool; the time limit belongs to tonight's settings. */
+  constraints: { year: Range; language?: string };
 
-  candidates: Movie[]; // filtered + ranked, best first
+  /** The best-ranked movies of the pool right now (the LLM sees these), best first. */
+  candidates: Movie[];
   recommended: Movie[]; // in order shown; last = focus
-  /** `genres`/`overview` are a snapshot of the movie, so later candidates can be compared to ones the user turned down. */
-  rejected: { id: number; reason: "seen" | "no"; genres?: string[]; overview?: string }[];
+  /** "no" = turned down (similar movies sink); "seen" = already watched (only removed). */
+  rejected: { id: number; reason: "seen" | "no" }[];
   /** consecutive system turns that recommended a movie; reset by any turn that didn't */
   recommendStreak: number;
   /** Id of the suggested movie the user accepted. Cleared when they say anything substantive afterwards. */
   accepted?: number;
   /** Phase 1 facts, set once at the start; no move changes them. */
   intake: Intake;
-
-  /** `page` counts batches of TMDB pages, not single pages. `total`: TMDB's result count for the last search. */
-  search: { status: "idle" | "dirty" | "failed"; page: number; noMore: boolean; total?: number };
 }
 
+/** TMDB discover filters: what Phase 1 decides (and the catalogue's own limits). */
 export interface SearchCriteria {
-  genres: string[];
-  /** true: a movie must have every genre (AND). false: any of them (OR). */
-  matchAll: boolean;
   excludeGenres: string[];
   runtime: Range;
   year: Range;
-  rating?: number;
-  language?: string;
   /** US certification ceiling ("PG"), from the youngest viewer. */
   certificationLte?: string;
   /** Subscription platforms (TMDB provider ids) in `region`; any of them will do. */
   watch?: { region: string; providers: number[] };
-  page: number;
 }
 
 export interface TmdbClient {
-  /** `total` is TMDB's count of all matching movies, not just the ones fetched. */
-  discover(criteria: SearchCriteria): Promise<{ movies: Movie[]; total: number }>;
-  /** EVERY movie matching the criteria (`page` ignored), walked in release-year ranges under TMDB's 500-page limit. No runtimes. */
+  /** EVERY movie matching the criteria, walked in release-year ranges under TMDB's 500-page limit. */
   pool(criteria: SearchCriteria): Promise<Movie[]>;
-  /** A movie's TMDB keywords; none when TMDB has no keyword record. Throws on other errors. */
-  keywords(id: number): Promise<string[]>;
+  /** Runtime, credits and keywords of one movie (one request). Throws on errors. */
+  details(id: number): Promise<MovieDetails>;
   searchMovie(title: string): Promise<Movie | null>;
 }
 
@@ -150,19 +161,27 @@ export interface TotalInformationState {
   is: InformationState;
 }
 
+/** Turns a wish or avoid text into a query vector (with the embedding model's query instruction). */
+export type EmbedQuery = (text: string) => Promise<Float32Array>;
+
+/** What the DME works with besides the information state: services and resources. */
 export interface DMEContext extends TotalInformationState {
-  embedder?: Embedder;
-  /** Tonight's movies, loaded when Phase 1 ended. Not read yet (step 8 part c ranks it). */
-  pool?: Pool;
   parentRef: any;
   tmdb: TmdbClient;
   llm: LlmClient;
+  embedQuery: EmbedQuery;
+  /** The catalogue's copy and vector of a movie (for liked movies, which may be outside tonight's pool). */
+  vectorsFor: VectorSource;
+  /** Tonight's movies, loaded when Phase 1 ended: what gets ranked. */
+  pool: Pool;
+  /** Query vectors by text, and liked movies' vectors by `movie:<id>`. Outside the IS: not plain JSON. */
+  vectors: Map<string, Float32Array>;
 }
 
 /** Browser top level. `is` exists once the settings form is done; `jakeSaid` is Jake's last line, shown on screen. */
 export interface DMContext {
-  embedder?: Embedder;
   ssRef: any;
+  embedQuery: EmbedQuery;
   tmdb: TmdbClient;
   llm: LlmClient;
   is?: InformationState;

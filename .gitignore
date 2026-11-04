@@ -12,10 +12,7 @@ dist-ssr
 
 # personal working notes
 todo.md
+done.md
 
 # on-disk caches (embeddings)
 .cache/
-
-# Phase 2 spike scripts: local for now (see todo.md, step 8 part c: delete, or un-ignore as rank-bench)
-scripts/spike-semantic.ts
-scripts/spike-wishes.ts

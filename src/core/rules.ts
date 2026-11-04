@@ -1,16 +1,17 @@
 /**
  * Information-state-update rules. A rule is precondition and effect in one: it returns a thunk
  * (the effect) if it applies, otherwise undefined. The dialogue manager (dialogue/dme.ts) runs them.
+ * Retrieval is local: after every user turn the DME ranks tonight's pool (`applyRanking`); no rule searches TMDB.
  */
 import { settings } from "../config/settings";
 import { notices } from "../config/prompts";
-import { adjust, constrain, retract } from "./constraints";
-import { resolvePreference, synonymGenres } from "./lexicon";
-import { eligible, rank } from "./ranking";
+import { constrain, retract } from "./constraints";
+import { resolveGenres } from "./lexicon";
+import type { Pool } from "./pool";
+import { featuresPerson, rankPool, type QueryVectors } from "./ranking";
 import { evidenceFromMoves } from "./readiness";
-import { criteriaFromIS, hasSignal, initialIS } from "./state";
 import { Action, InformationState as IS, Move, MoveOf, Movie, TotalInformationState } from "./types";
-import { addUnique, last, sameIds, without } from "./util";
+import { addUnique, last, without } from "./util";
 
 type Rule = (context: TotalInformationState) => ((x: void) => IS) | undefined;
 
@@ -22,38 +23,14 @@ function usr<T extends Move["type"]>(is: IS, type: T): MoveOf<T>[] {
   return lu?.speaker === "usr" ? (lu.moves.filter((m) => m.type === type) as MoveOf<T>[]) : [];
 }
 
-const queryKey = (is: IS) => JSON.stringify(criteriaFromIS(is, 1));
-
-/** Query changed → stale candidates, search again from the first batch. */
-const markDirty = (is: IS): IS => ({
-  ...is,
-  candidates: [],
-  search: { status: "dirty", page: 1, noMore: false },
-});
-
-/** Apply a change; mark the search dirty only if the TMDB query actually changed. */
-const update = (is: IS, f: (s: IS) => IS): IS => {
-  const next = f(is);
-  return queryKey(next) !== queryKey(is) ? markDirty(next) : next;
-};
-
-/**
- * Words from `prefer` moves that name no genre or mood we know ("goofy", "cozy"). They are taste all the same, so they
- * are kept as vibes instead of being dropped.
- */
-function looseTaste(is: IS): string[] {
-  return usr(is, "prefer").flatMap((m) =>
-    m.negated
-      ? []
-      : [m.mood, m.genre].flatMap((t) => (t?.trim() && !resolvePreference(t).names.length ? [t.trim()] : []))
-  );
-}
+const withNotice = (is: IS, notice: string): IS =>
+  is.private.notices.includes(notice) ? is : { ...is, private: { ...is.private, notices: [...is.private.notices, notice] } };
 
 /** A title the user names ("that one" = the movie in focus), looked up among what we know. */
 function findMovie(is: IS, title?: string): Movie | undefined {
   if (!title) return last(is.recommended);
   const t = title.toLowerCase();
-  return [...is.recommended, ...is.candidates, ...is.prefs.seeds].find((m) => {
+  return [...is.recommended, ...is.candidates, ...is.seeds].find((m) => {
     const mt = m.title.toLowerCase();
     return mt.includes(t) || t.includes(mt);
   });
@@ -62,48 +39,36 @@ function findMovie(is: IS, title?: string): Movie | undefined {
 const spokenText = (moves: Move[]) => moves.flatMap((m) => (m.type === "say" ? [m.text] : [])).join(" ");
 const recommendedIds = (moves: Move[]) =>
   moves.flatMap((m) => (m.type === "say" && m.movieId !== undefined ? [m.movieId] : []));
+const sameName = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
 
-/* ---- results of async retrieval (called from the dialogue manager, not rules) ---- */
+/* ---- results of async work (called from the dialogue manager, not rules) ---- */
 
-/** A resolved (or not found) seed title: "something like X". */
+/** A resolved (or not found) liked movie: "something like X". It is never suggested back. */
 export function applySeed(is: IS, movie: Movie | null): IS {
   const i = is.private.agenda.findIndex((a) => a.type === "resolve_seed");
   if (i < 0) return is;
   const title = is.private.agenda[i].title;
-  const base: IS = {
-    ...is,
-    private: {
-      agenda: is.private.agenda.filter((_, j) => j !== i),
-      notices: movie ? is.private.notices : [...is.private.notices, notices.seedNotFound(title)],
-    },
-  };
-  if (!movie) return base;
-  return update(base, (s) => ({
-    ...s,
-    prefs: {
-      ...s.prefs,
-      seeds: s.prefs.seeds.some((x) => x.id === movie.id) ? s.prefs.seeds : [...s.prefs.seeds, movie],
-      genres: addUnique(s.prefs.genres, movie.genres.filter((g) => !s.dislikes.genres.includes(g))),
-    },
-    // the user obviously knows the seed: never recommend it back
-    rejected: s.rejected.some((r) => r.id === movie.id) ? s.rejected : [...s.rejected, { id: movie.id, reason: "seen" }],
-  }));
+  const base: IS = { ...is, private: { ...is.private, agenda: is.private.agenda.filter((_, j) => j !== i) } };
+  if (!movie) return withNotice(base, notices.seedNotFound(title));
+  return base.seeds.some((x) => x.id === movie.id) ? base : { ...base, seeds: [...base.seeds, movie] };
 }
 
-export const applyResults = (is: IS, movies: Movie[], total: number = movies.length): IS => ({
-  ...is,
-  candidates: rank(is, movies),
-  search: { ...is.search, status: "idle", noMore: movies.length === 0, total },
-});
+/** A liked movie could not be looked up: drop pending lookups and tell Jake. */
+export const applyFailure = (is: IS): IS =>
+  withNotice({ ...is, private: { ...is.private, agenda: is.private.agenda.filter((a) => a.type !== "resolve_seed") } }, notices.dbUnreachable);
 
-export const applyFailure = (is: IS): IS => ({
-  ...is,
-  private: {
-    agenda: is.private.agenda.filter((a) => a.type !== "resolve_seed"),
-    notices: [...is.private.notices, notices.dbUnreachable],
-  },
-  search: { ...is.search, status: "failed" },
-});
+/**
+ * Ranks tonight's pool for the current state: the best `candidatesShown` become the candidates. A person the user
+ * just asked for who is in none of tonight's movies is a notice (the ranking can do nothing for them).
+ */
+export function applyRanking(is: IS, pool: Pool, q: QueryVectors): IS {
+  const ranked = rankPool(is, pool, q);
+  let next: IS = { ...is, candidates: ranked.slice(0, settings.dialogue.candidatesShown).map((s) => s.movie) };
+  for (const p of usr(is, "person")) {
+    if (!p.negated && !pool.movies.some((m) => featuresPerson(m, p.name))) next = withNotice(next, notices.personNotInPool(p.name));
+  }
+  return next;
+}
 
 /* ---- the rules ---- */
 
@@ -146,85 +111,57 @@ export const rules: Record<string, Rule> = {
 
   /* -- integrate user moves -- */
 
-  /** A failed search is retried on the next user turn. */
-  integrate_retry_failed: ({ is }) =>
-    is.shared.lu?.speaker === "usr" && is.search.status === "failed" ? () => markDirty(is) : undefined,
+  /** The NLU rewrites the whole wish each time taste changes: the latest one replaces the old. */
+  integrate_wish: ({ is }) => {
+    const text = last(usr(is, "wish"))?.text.trim();
+    return text && text !== is.wish ? () => ({ ...is, wish: text }) : undefined;
+  },
 
-  integrate_restart: ({ is }) =>
-    usr(is, "restart").length
-      ? () => ({
-          ...initialIS(is.intake),
-          history: is.history,
-          shared: is.shared,
-          private: { agenda: [], notices: [notices.restarted] },
-        })
-      : undefined,
+  integrate_avoid: ({ is }) => {
+    const texts = usr(is, "avoid").map((m) => m.text.trim()).filter((t) => t && !is.avoid.includes(t));
+    return texts.length ? () => ({ ...is, avoid: [...is.avoid, ...texts] }) : undefined;
+  },
 
+  /** A named genre: a soft want, or (negated) a hard avoid. Saying one undoes the other. */
   integrate_prefer: ({ is }) => {
-    const ms = usr(is, "prefer");
+    const ms = usr(is, "prefer").filter((m) => resolveGenres(m.genre).length);
     if (!ms.length) return;
     return () =>
-      update(is, (s) =>
-        ms.reduce((acc, m) => {
-          const resolved = [resolvePreference(m.mood), resolvePreference(m.genre)];
-          const names = resolved.flatMap((r) => r.names);
-          if (!names.length) return acc;
-          const required = resolved.flatMap((r) => (r.required ? r.names : []));
-          return m.negated
-            ? {
-                ...acc,
-                prefs: {
-                  ...acc.prefs,
-                  genres: without(acc.prefs.genres, names),
-                  required: without(acc.prefs.required, names),
-                },
-                dislikes: { genres: addUnique(acc.dislikes.genres, names) },
-              }
-            : {
-                ...acc,
-                prefs: {
-                  ...acc.prefs,
-                  genres: addUnique(acc.prefs.genres, names),
-                  required: addUnique(acc.prefs.required, required),
-                },
-                dislikes: { genres: without(acc.dislikes.genres, names) },
-              };
-        }, s)
+      ms.reduce((acc, m) => {
+        const names = resolveGenres(m.genre);
+        return m.negated
+          ? { ...acc, genres: without(acc.genres, names), avoidGenres: addUnique(acc.avoidGenres, names) }
+          : { ...acc, genres: addUnique(acc.genres, names), avoidGenres: without(acc.avoidGenres, names) };
+      }, is);
+  },
+
+  /** An actor or director, wanted or not; the latest word on a name wins. */
+  integrate_person: ({ is }) => {
+    const ms = usr(is, "person");
+    if (!ms.length) return;
+    return () =>
+      ms.reduce(
+        (acc, m) => ({
+          ...acc,
+          people: [...acc.people.filter((p) => !sameName(p.name, m.name)), { name: m.name.trim(), negated: !!m.negated }],
+        }),
+        is
       );
   },
 
+  /** Year and language narrow the pool; time is tonight's setting, so a runtime request only gets a notice. */
   integrate_constrain: ({ is }) => {
     const ms = usr(is, "constrain");
-    return ms.length ? () => update(is, (s) => ms.reduce(constrain, s)) : undefined;
-  },
-
-  integrate_adjust: ({ is }) => {
-    const ms = usr(is, "adjust");
-    return ms.length ? () => update(is, (s) => ms.reduce(adjust, s)) : undefined;
+    if (!ms.length) return;
+    return () => {
+      const next = ms.reduce(constrain, is);
+      return ms.some((m) => m.slot === "runtime") ? withNotice(next, notices.timeInSettings) : next;
+    };
   },
 
   integrate_retract: ({ is }) => {
     const ms = usr(is, "retract");
-    return ms.length ? () => update(is, (s) => ms.reduce((a, m) => retract(a, m.slot), s)) : undefined;
-  },
-
-  /**
-   * Loose taste ("cozy", "makes me think"): remembered, ranked against descriptions semantically. Includes words a
-   * `prefer` move carried but the lexicon does not know. A word that is a synonym of a mood ("goofy" = funny) also
-   * adds that mood's genres, only as alternatives to rank by (`prefs.genres`), never as required ones.
-   */
-  integrate_vibe: ({ is }) => {
-    const texts = [...usr(is, "vibe").map((m) => m.text.trim()), ...looseTaste(is)].filter(Boolean);
-    if (!texts.length) return;
-    return () => {
-      const next = update(is, (s) => ({
-        ...s,
-        vibe: addUnique(s.vibe, texts),
-        prefs: { ...s.prefs, genres: addUnique(s.prefs.genres, texts.flatMap(synonymGenres)) },
-      }));
-      // A vibe doesn't change the TMDB query, so as the first signal it must trigger the first search itself.
-      return hasSignal(is) ? next : markDirty(next);
-    };
+    return ms.length ? () => ms.reduce((a, m) => retract(a, m.slot), is) : undefined;
   },
 
   /** "Something like X": queue a TMDB lookup (done by the dialogue manager as an invoked actor). */
@@ -250,14 +187,9 @@ export const rules: Record<string, Rule> = {
       let rejected = is.rejected;
       for (const { title, reason } of ms) {
         const target = findMovie(is, title);
-        if (target && !rejected.some((r) => r.id === target.id)) {
-          // keep a snapshot: the movie leaves the candidates, but later candidates are compared to it
-          rejected = [...rejected, { id: target.id, reason, genres: target.genres, overview: target.overview }];
-        }
+        if (target && !rejected.some((r) => r.id === target.id)) rejected = [...rejected, { id: target.id, reason }];
       }
-      // Re-rank now: with no vibe or liked movie, nothing else would re-sort until the next TMDB search.
-      // Safe for semantic order too, because the semantic step re-sorts after this whenever it applies.
-      return { ...is, rejected, candidates: rank({ ...is, rejected }, is.candidates) };
+      return { ...is, rejected };
     };
   },
 
@@ -272,43 +204,8 @@ export const rules: Record<string, Rule> = {
     return () => ({
       ...is,
       recommended: [...is.recommended, ...shown.filter((m) => !is.recommended.some((r) => r.id === m.id))],
+      // A suggested movie leaves the candidates at once (the next ranking happens only after the user's turn).
+      candidates: is.candidates.filter((c) => !shown.some((m) => m.id === c.id)),
     });
   },
-
-  /** Keep candidates free of suggested/rejected/disliked movies. Filter only: re-sorting would undo semantic order. */
-  filter_candidates: ({ is }) => {
-    const kept = eligible(is, is.candidates);
-    return sameIds(kept, is.candidates) ? undefined : () => ({ ...is, candidates: kept });
-  },
-
-  /* -- retrieve -- */
-
-  /**
-   * Hardly any movies have all the named genres at once ("Western" AND "Music"): search for any of them instead,
-   * and tell the user. The few that have them all still rank first, since they match every wanted genre.
-   */
-  relax_genres: ({ is }) =>
-    is.search.status === "idle" &&
-    is.search.total !== undefined &&
-    is.search.total < settings.search.thinPool &&
-    is.prefs.required.length >= 2
-      ? () => {
-          const relaxed = update(is, (s) => ({ ...s, prefs: { ...s.prefs, required: [] } }));
-          return {
-            ...relaxed,
-            private: { ...relaxed.private, notices: [...relaxed.private.notices, notices.genresRelaxed(is.prefs.required)] },
-          };
-        }
-      : undefined,
-
-  /** Pool exhausted but TMDB may have more → ask for the next batch of pages. */
-  next_page: ({ is }) =>
-    is.shared.lu?.speaker === "usr" &&
-    is.search.status === "idle" &&
-    is.candidates.length === 0 &&
-    !is.search.noMore &&
-    is.search.page < settings.search.maxBatches &&
-    hasSignal(is)
-      ? () => ({ ...is, search: { status: "dirty", page: is.search.page + 1, noMore: false } })
-      : undefined,
 };

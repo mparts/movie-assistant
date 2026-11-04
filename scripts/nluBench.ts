@@ -42,10 +42,10 @@ const realHistory: Turn[] = [
 const offer = sys("Romance and laughs, nice combo. Are you leaning more toward a lighthearted date vibe or something with a bit more heart?");
 const realSuggestion = [...realHistory, offer, usr("yeap you got me... lighthearted date vibe it is!!"), sys("Roman Holiday has that sweet, breezy romance and funny moments perfect for a light date night.")];
 const onlyAccept = (m: Move[]) => expect(m.length === 1 && m[0].type === "accept", `expected one accept move, got ${JSON.stringify(m)}`);
-const romcom = (is: InformationState): InformationState => ({
-  ...is,
-  prefs: { ...is.prefs, genres: ["Romance", "Comedy"], required: ["Romance", "Comedy"] },
-});
+const romcom = (is: InformationState): InformationState => ({ ...is, genres: ["Romance", "Comedy"], wish: "A light, funny romantic comedy." });
+const wishes = (m: Move[], re: RegExp) => of(m, "wish").some((w) => re.test(w.text));
+/** Words that turn a wish into its opposite: they belong in "avoid" or a negated genre. */
+const NEGATION = /\b(no|not|without|never|nothing|avoid|but)\b/i;
 
 export const cases: BenchCase[] = [
   {
@@ -53,7 +53,7 @@ export const cases: BenchCase[] = [
     history: [...realHistory, offer],
     state: romcom,
     utterance: "yeap you got me... lighthearted date vibe it is!!",
-    check: (m) => expect(of(m, "vibe").some((v) => /light|date/i.test(v.text)), "the chosen vibe was not recorded"),
+    check: (m) => expect(wishes(m, /light|date/i), "the chosen vibe did not reach the wish"),
   },
   {
     name: "real-reject-and-funnier",
@@ -64,8 +64,7 @@ export const cases: BenchCase[] = [
     // The "no" belongs to "this", not to funny: Comedy must never end up avoided.
     check: (m) =>
       expect(
-        !of(m, "prefer").some((p) => p.negated) &&
-          (of(m, "reject").length > 0 || of(m, "adjust").some((a) => /funn/i.test(a.direction))),
+        !of(m, "prefer").some((p) => p.negated) && (of(m, "reject").length > 0 || wishes(m, /funn|comed|laugh|humou?r/i)),
         "the 'no' was attached to a genre, or neither the rejection nor 'funnier' was understood"
       ),
   },
@@ -82,12 +81,12 @@ export const cases: BenchCase[] = [
     history: [...realSuggestion, sys("Got it, you want more laughs. Would you be willing to drop the no-comedy restriction?")],
     suggested: "About Time",
     justSuggested: false,
-    state: (is) => ({ ...is, prefs: { ...is.prefs, genres: ["Romance"] }, dislikes: { genres: ["Comedy"] } }),
+    state: (is) => ({ ...is, genres: ["Romance"], avoidGenres: ["Comedy"] }),
     utterance: "yes please do that!!",
     // Either way the avoided genre is released: a retract, or a plain "wants Comedy" (which removes it from the avoided).
     check: (m) =>
       expect(
-        of(m, "retract").some((r) => r.slot === "dislikes") || of(m, "prefer").some((p) => !p.negated && /comedy/i.test(p.genre ?? "")),
+        of(m, "retract").some((r) => r.slot === "avoidGenres") || of(m, "prefer").some((p) => !p.negated && /comedy/i.test(p.genre)),
         "the avoided genre was not released"
       ),
   },
@@ -95,13 +94,12 @@ export const cases: BenchCase[] = [
     name: "real-yes-to-an-alternative",
     history: [...realSuggestion, sys("Looks like none of the picks are big comedies, but we could go with a sweet romance like Past Lives if that works for you.")],
     justSuggested: false,
-    state: (is) => ({ ...is, prefs: { ...is.prefs, genres: ["Romance", "Drama"] } }),
+    state: romcom,
     utterance: "yes it works!!",
-    // Nothing to record, or an accept; repeating the genres already known is harmless. Never a negated genre, a vibe
-    // or a like taken from Jake's sentence.
+    // A yes to Jake's proposal may update the wish or accept; never a negated genre, an avoid, or a liked movie.
     check: (m) =>
       expect(
-        m.every((x) => x.type === "accept" || (x.type === "prefer" && !x.negated && /^(romance|comedy|drama)$/i.test(x.genre ?? ""))),
+        !of(m, "prefer").some((p) => p.negated) && !of(m, "avoid").length && !of(m, "like").length,
         `recorded ${JSON.stringify(m)} from the assistant's words`
       ),
   },
@@ -127,56 +125,50 @@ export const cases: BenchCase[] = [
     suggested: "Back to the Future",
     state: romcom,
     utterance: "hmm, I'm not sure about that one",
-    check: (m) => expect(!of(m, "vibe").length && !of(m, "like").length && !of(m, "prefer").some((p) => p.negated), `recorded ${JSON.stringify(m)}`),
+    check: (m) =>
+      expect(!wishes(m, /goofy|future|time travel/i) && !of(m, "like").length && !of(m, "avoid").length && !of(m, "prefer").some((p) => p.negated), `recorded ${JSON.stringify(m)}`),
   },
   {
     name: "no-genre-kept",
     utterance: "no scary stuff please",
-    check: (m) => expect(of(m, "prefer").some((p) => p.negated && /horror|scary/i.test(`${p.genre ?? ""} ${p.mood ?? ""}`)), "no negated Horror"),
+    check: (m) =>
+      expect(
+        of(m, "prefer").some((p) => p.negated && /horror/i.test(p.genre)) || of(m, "avoid").some((a) => /scar|horror|fright/i.test(a.text)),
+        "neither a negated Horror nor an avoid"
+      ),
   },
   {
-    name: "6c-pick-offered-option",
+    name: "pick-offered-option",
     history: [
       usr("I was thinking a romantic comedy will be nice"),
       sys("Sounds like a rom-com could hit the spot. Any particular vibe, like goofy or more heartfelt?"),
     ],
     state: romcom,
     utterance: "goofy huh? yeah let's go with that!!",
-    // Either a vibe or a mood/genre preference counts as having heard "goofy". (Whether the rules KEEP an unknown
-    // mood is a separate question, covered by step 6d; this case only scores what the model understood.)
-    check: (m) =>
-      expect(
-        of(m, "vibe").some((v) => /goofy|silly|funny|light/i.test(v.text)) ||
-          of(m, "prefer").some((p) => !p.negated && /goofy|silly|funny|comed/i.test(`${p.mood ?? ""} ${p.genre ?? ""}`)),
-        "'goofy' was not picked up (or came back negated)"
-      ),
+    check: (m) => expect(wishes(m, /goof|sill|zan|wack/i), "'goofy' did not reach the wish"),
   },
   {
-    name: "6c-question-alone-adds-nothing",
+    name: "question-alone-adds-nothing",
     history: [
       usr("I was thinking a romantic comedy will be nice"),
       sys("Sounds like a rom-com could hit the spot. Are you after something light and funny, or more heartfelt?"),
     ],
     state: romcom,
     utterance: "hmm, not sure yet, what do you think?",
-    // Repeating the genres already known (Romance, Comedy) is harmless: the rules dedupe it. Anything else is
-    // Jake's offered options or the user's hesitation ("not sure yet") recorded as taste.
+    // Jake's offered options or the user's hesitation must not become taste.
     check: (m) =>
-      expect(
-        !of(m, "vibe").length && of(m, "prefer").every((p) => /^(romance|comedy)$/i.test(p.genre ?? "") && !p.negated),
-        "recorded something that was not the user's answer (Jake's options, or hesitation)"
-      ),
+      expect(!wishes(m, /heartfelt|not sure/i) && !of(m, "avoid").length && !of(m, "prefer").some((p) => p.negated), `recorded ${JSON.stringify(m)}`),
   },
   {
-    name: "6b-negated-setting",
+    name: "negated-setting",
     history: [sys("How about The Hating Game? It's a playful office rivalry that turns sweet and funny.")],
     suggested: "The Hating Game",
     state: romcom,
     utterance: "hhhmmm... not really... I don't like office settings",
     check: (m) =>
       expect(
-        of(m, "vibe").some((v) => /office/i.test(v.text)) || of(m, "reject").length > 0,
-        "neither the office setting nor a rejection was recorded"
+        (of(m, "avoid").some((a) => /office/i.test(a.text)) || of(m, "reject").length > 0) && !wishes(m, /office/i),
+        "neither the office setting nor a rejection was recorded, or 'office' went into the wish"
       ),
   },
   {
@@ -190,9 +182,55 @@ export const cases: BenchCase[] = [
     history: [sys("I'm good, thanks. Anything particular you're in the mood for tonight?")],
     utterance: "I was thinking a romantic comedy will be nice!!",
     check: (m) => {
-      const t = of(m, "prefer").map((p) => `${p.genre ?? ""} ${p.mood ?? ""}`).join(" ");
-      return expect(/romanc|romantic/i.test(t) && /comed|funny/i.test(t), "Romance and Comedy not both found");
+      const t = [...of(m, "prefer").map((p) => p.genre), ...of(m, "wish").map((w) => w.text)].join(" ");
+      return expect(/roman/i.test(t) && /comed/i.test(t), "Romance and Comedy not both found");
     },
+  },
+  {
+    name: "first-wish",
+    history: [sys("What are you in the mood for tonight?")],
+    utterance: "something cozy and funny for a rainy evening",
+    check: (m) => expect(wishes(m, /cozy|cosy/i) && wishes(m, /funn|comed|laugh|humou?r/i), "no wish with cozy and funny"),
+  },
+  {
+    name: "wish-update-keeps-the-old",
+    history: [sys("A tense crime thriller, got it. Anything else?")],
+    state: (is) => ({ ...is, wish: "A tense, gritty crime thriller about a detective hunting a killer." }),
+    utterance: "maybe with a bit more humor",
+    check: (m) => expect(wishes(m, /crime|thriller|detective/i) && wishes(m, /humou?r|funn|comed|witty/i), "the rewritten wish lost the old taste or the new humor"),
+  },
+  {
+    name: "avoid-is-not-in-the-wish",
+    utterance: "an adventure for the kids, but no princesses please",
+    check: (m) =>
+      expect(
+        of(m, "avoid").some((a) => /princess/i.test(a.text)) && !of(m, "wish").some((w) => /princess/i.test(w.text) || NEGATION.test(w.text)),
+        "princesses not avoided, or they (or a negation) ended up in the wish"
+      ),
+  },
+  {
+    name: "scary-not-gory",
+    utterance: "something scary with ghosts, but not gory",
+    check: (m) =>
+      expect(
+        wishes(m, /ghost|haunt|scary|creepy/i) && of(m, "avoid").some((a) => /gor|blood/i.test(a.text)) && !of(m, "wish").some((w) => NEGATION.test(w.text) || /gor/i.test(w.text)),
+        "no ghost wish, no gore avoid, or a negation in the wish"
+      ),
+  },
+  {
+    name: "person-wanted",
+    utterance: "anything with Tom Hanks?",
+    check: (m) => expect(of(m, "person").some((p) => /hanks/i.test(p.name) && !p.negated), "no wanted Tom Hanks"),
+  },
+  {
+    name: "person-avoided",
+    utterance: "please nothing with Adam Sandler",
+    check: (m) => expect(of(m, "person").some((p) => /sandler/i.test(p.name) && p.negated), "no avoided Adam Sandler"),
+  },
+  {
+    name: "director",
+    utterance: "I'm in the mood for a Nolan film",
+    check: (m) => expect(of(m, "person").some((p) => /nolan/i.test(p.name) && !p.negated), "no wanted Nolan"),
   },
   {
     name: "runtime-limit",
@@ -206,7 +244,7 @@ export const cases: BenchCase[] = [
   {
     name: "negated-genre",
     utterance: "anything but horror, I can't sleep after those",
-    check: (m) => expect(of(m, "prefer").some((p) => /horror/i.test(p.genre ?? "") && p.negated === true), "no negated Horror"),
+    check: (m) => expect(of(m, "prefer").some((p) => /horror/i.test(p.genre) && p.negated === true), "no negated Horror"),
   },
   {
     name: "seen-the-one-suggested",
@@ -223,14 +261,17 @@ export const cases: BenchCase[] = [
     check: (m) => expect(of(m, "reject").length === 1, "no 'reject' move"),
   },
   {
+    // From a live chat: with a person in the same sentence, the like was dropped and Jake suggested Inception back.
+    name: "like-next-to-a-person",
+    history: [sys("Sounds like you want something that'll twist your brain a bit. More cerebral puzzles or flashy action?")],
+    state: (is) => ({ ...is, wish: "A mind-bending sci-fi movie." }),
+    utterance: "something like Inception, maybe even by Nolan",
+    check: (m) => expect(of(m, "like").some((l) => /inception/i.test(l.title)) && of(m, "person").some((p) => /nolan/i.test(p.name)), "the like or the person was lost"),
+  },
+  {
     name: "like-a-named-movie",
     utterance: "something along the lines of Parasite",
     check: (m) => expect(of(m, "like").some((l) => /parasite/i.test(l.title)), "no 'like Parasite'"),
-  },
-  {
-    name: "restart",
-    utterance: "actually, let's start over and forget all of that",
-    check: (m) => expect(of(m, "restart").length === 1, "no 'restart' move"),
   },
   {
     name: "relative-shorter",
@@ -239,16 +280,9 @@ export const cases: BenchCase[] = [
     utterance: "do you have anything a bit shorter than that?",
     check: (m) =>
       expect(
-        of(m, "adjust").some((a) => a.dimension === "runtime" && /short/i.test(a.direction)) ||
-          of(m, "constrain").some((c) => c.slot === "runtime" && c.op === "lte"),
+        of(m, "constrain").some((c) => c.slot === "runtime" && c.op === "lte"),
         "no shorter-runtime request"
       ),
-  },
-  {
-    name: "retract-time-limit",
-    state: (is) => ({ ...is, constraints: { ...is.constraints, runtime: { max: 90 } } }),
-    utterance: "never mind the time limit, any length is fine",
-    check: (m) => expect(of(m, "retract").some((r) => r.slot === "runtime"), "no retract of runtime"),
   },
   {
     name: "decade",

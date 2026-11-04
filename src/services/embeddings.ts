@@ -1,42 +1,5 @@
-import type { Movie } from "../core/types";
-import { isDebug } from "../core/util";
-
-export interface Embedder {
-  /** A 0..1 semantic relevance score per movie id (movies without a description are skipped). */
-  score(profile: string, movies: Movie[]): Promise<Map<number, number>>;
-}
-
-/** Cosine similarity, mapped from [-1, 1] to [0, 1]. */
-export function cosine01(a: number[], b: number[]): number {
-  if (!a.length || a.length !== b.length) return 0;
-  let dot = 0, aa = 0, bb = 0;
-  for (let i = 0; i < a.length; i++) {
-    dot += a[i] * b[i];
-    aa += a[i] * a[i];
-    bb += b[i] * b[i];
-  }
-  if (!aa || !bb) return 0;
-  return Math.max(0, Math.min(1, (dot / Math.sqrt(aa * bb) + 1) / 2));
-}
-
-export interface EmbedderOptions {
-  /** Full URL of Ollama's batch endpoint (…/api/embed). */
-  url: string;
-  model: string;
-  queryPrefix: string;
-  documentPrefix: string;
-  batchSize: number;
-  timeoutMs: number;
-  /** Where movie-description vectors survive restarts. Without one, the cache lives only in memory. */
-  store?: EmbeddingStore;
-}
-
-/** Persistent storage for description vectors. Both methods must never throw: a bad cache is an empty cache. */
-export interface EmbeddingStore {
-  /** Vectors saved earlier for this model, by key. Insertion order is age order (oldest first). */
-  load(model: string): Map<string, number[]>;
-  save(model: string, entries: Map<string, number[]>): void;
-}
+/** Embeddings through Ollama: the movie text, one batch request, and the query side (wish and avoid texts). */
+import type { EmbedQuery, Movie } from "../core/types";
 
 /**
  * The text a movie is embedded as: `title (year). Genres: … . overview Keywords: ….` The catalogue and movies embedded
@@ -87,57 +50,7 @@ export function hash53(text: string): string {
   return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36);
 }
 
-/** One instance keeps an in-memory cache across turns; description vectors also go to the store, if any. */
-export function createEmbedder(o: EmbedderOptions): Embedder {
-  const cache = new Map<string, number[]>();
-  /** Keys that belong in the store (descriptions repeat across sessions; the per-turn taste query does not). */
-  const persisted = new Set<string>();
-  let loaded = false;
-  function loadStore() {
-    if (loaded) return;
-    loaded = true;
-    for (const [key, vec] of o.store?.load(o.model) ?? []) {
-      cache.set(key, vec);
-      persisted.add(key);
-    }
-  }
-
-  const embed = (texts: string[]) => embedTexts(o.url, o.model, texts, o.timeoutMs);
-
-  interface Item { key: string; text: string; persist: boolean }
-
-  /** Embeds only items not seen before, in batches; saves to the store when new descriptions were added. */
-  async function vectors(items: Item[]): Promise<number[][]> {
-    loadStore();
-    const seen = new Set<string>();
-    const missing = items.filter((i) => !cache.has(i.key) && !seen.has(i.key) && !!seen.add(i.key));
-    for (let i = 0; i < missing.length; i += o.batchSize) {
-      const batch = missing.slice(i, i + o.batchSize);
-      (await embed(batch.map((b) => b.text))).forEach((v, j) => {
-        cache.set(batch[j].key, v);
-        if (batch[j].persist) persisted.add(batch[j].key);
-      });
-    }
-    if (o.store && missing.some((m) => m.persist)) {
-      o.store.save(o.model, new Map([...persisted].map((k) => [k, cache.get(k)!])));
-    }
-    if (isDebug()) console.log(`[embed] ${missing.length} new / ${items.length} texts`);
-    return items.map((i) => cache.get(i.key)!);
-  }
-
-  return {
-    async score(profile, movies) {
-      const withText = movies.filter((m) => m.overview.trim());
-      if (!profile.trim() || !withText.length) return new Map();
-      const queryText = o.queryPrefix + profile.trim();
-      const [query, ...docs] = await vectors([
-        { key: `q:${queryText}`, text: queryText, persist: false },
-        ...withText.map((m) => {
-          const text = o.documentPrefix + m.overview.trim();
-          return { key: `d:${hash53(text)}`, text, persist: true };
-        }),
-      ]);
-      return new Map(withText.map((m, i) => [m.id, cosine01(query, docs[i])]));
-    },
-  };
+/** Query vectors: the text with the model's query instruction (qwen3-embedding wants it on the query side only). */
+export function createEmbedQuery(o: { url: string; model: string; queryPrefix: string; timeoutMs: number }): EmbedQuery {
+  return async (text) => Float32Array.from((await embedTexts(o.url, o.model, [o.queryPrefix + text.trim()], o.timeoutMs))[0]);
 }

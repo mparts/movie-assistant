@@ -1,106 +1,146 @@
-/** Scoring and ordering candidates: a transparent weighted baseline, optionally blended with embeddings. */
+/**
+ * Ranking tonight's pool. Pure and synchronous: the typed chat, the browser and `npm run rank-bench` all call this.
+ *
+ *   score = 0.8·semantic + 0.1·genres + 0.1·popularity − avoid − reject + person      (settings.ranking)
+ *
+ * Every term but `person` is a percentile within the movies still eligible, so the weights compare like with like.
+ * semantic: similarity to the wish, or to a liked movie, whichever is higher. avoid / reject: a penalty only for the
+ * movies most similar to an avoid text / a turned-down movie. person: a wanted actor or director is in it.
+ */
 import { settings } from "../config/settings";
-import { InformationState as IS, Movie } from "./types";
+import type { Pool } from "./pool";
+import type { InformationState as IS, Movie } from "./types";
 
-const { weights, ratingPrior, similarityMix, semanticWeight, neutral, runtimeFit: fit, rejectionPenalty } = settings.ranking;
+const R = settings.ranking;
 
-/** Ignore common description words so similarity reflects the plot, not filler. */
-const STOP_WORDS = new Set(
-  "a an and are as at be by for from has have he her his in into is it its of on or she that the their them there they this to was were who with you your".split(" ")
-);
-const words = (text: string): Set<string> =>
-  new Set((text.toLowerCase().match(/[a-z]{3,}/g) ?? []).filter((w) => !STOP_WORDS.has(w)));
-
-/** Jaccard similarity: shared terms divided by distinct terms (0..1). */
-function overlap<T>(a: Set<T>, b: Set<T>): number {
-  if (!a.size || !b.size) return 0;
-  let shared = 0;
-  for (const x of a) if (b.has(x)) shared++;
-  return shared / (a.size + b.size - shared);
+/** The query side: vectors of the wish, the liked movies, and the avoid texts (any may be missing). */
+export interface QueryVectors {
+  wish?: Float32Array;
+  seeds: Float32Array[];
+  avoid: Float32Array[];
 }
 
-/** How alike two movies are (0..1): shared genres and shared description words. */
-const similarity = (a: { genres: string[]; overview: string }, b: { genres: string[]; overview: string }): number =>
-  similarityMix.genres * overlap(new Set(a.genres), new Set(b.genres)) +
-  similarityMix.text * overlap(words(a.overview), words(b.overview));
-
-/** Soft runtime fit; hard runtime limits are already applied by TMDB discovery. */
-function runtimeFit(is: IS, movie: Movie): number {
-  if (!movie.runtime || movie.runtime <= 0) return neutral; // unknown: neutral
-  const { min, max } = is.constraints.runtime;
-  if (min !== undefined && movie.runtime < min) return 0;
-  if (max !== undefined && movie.runtime > max) return 0;
-  if (min !== undefined && max !== undefined) {
-    const mid = (min + max) / 2;
-    return Math.max(0, 1 - Math.abs(movie.runtime - mid) / Math.max(fit.minHalfBand, (max - min) / 2));
-  }
-  if (max !== undefined) return Math.min(1, Math.max(0, (max - movie.runtime) / fit.rampMinutes + neutral));
-  if (min !== undefined) return Math.min(1, Math.max(0, (movie.runtime - min) / fit.rampMinutes + neutral));
-  return neutral; // no runtime preference: neutral
+export interface Scored {
+  movie: Movie;
+  score: number;
+  /** The terms, for "why this movie?" and the bench. */
+  semantic: number;
+  genres: number;
+  popularity: number;
+  avoid: number;
+  reject: number;
+  person: number;
 }
 
-/** A transparent 0..1 score per factor, and the weighted total. */
-export function movieScore(is: IS, movie: Movie) {
-  const preferred = new Set(is.prefs.genres);
-  const genres = preferred.size
-    ? [...preferred].filter((g) => movie.genres.includes(g)).length / preferred.size
-    : 0;
+/* ---- people ---- */
 
-  const likeness = is.prefs.seeds.length ? Math.max(...is.prefs.seeds.map((seed) => similarity(movie, seed))) : 0;
+const nameWords = (s: string) =>
+  s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
 
-  // Resemblance to the most similar movie the user said "no" to. "Already seen" is not a dislike (it also holds
-  // the movies they asked for), and entries without a snapshot (older data) carry nothing to compare.
-  // Genres the user asked for are left out of the comparison: turning down one rom-com is not a reason to
-  // push every other rom-com down. Only the description and the *other* genres count as resemblance.
-  const unwanted = (genres: string[]) => genres.filter((g) => !preferred.has(g));
-  const turnedDown = is.rejected.filter((r) => r.reason === "no" && (r.genres?.length || r.overview));
-  const rejection = turnedDown.length
-    ? Math.max(
-        ...turnedDown.map((r) =>
-          similarity(
-            { genres: unwanted(movie.genres), overview: movie.overview },
-            { genres: unwanted(r.genres ?? []), overview: r.overview ?? "" }
-          )
-        )
-      )
-    : 0;
-
-  const votes = Math.max(0, movie.votes || 0);
-  const rating = Math.max(0, Math.min(1,
-    ((votes * (movie.rating || 0) + ratingPrior.votes * ratingPrior.mean) / (votes + ratingPrior.votes)) / 10
-  ));
-  const runtime = runtimeFit(is, movie);
-  const total =
-    weights.genres * genres + weights.similarity * likeness + weights.rating * rating + weights.runtime * runtime -
-    rejectionPenalty * rejection; // can dip below 0: only the order matters
-  return { total, genres, similarity: likeness, rating, runtime, rejection };
+/** Is this person (as the user named them: "Nolan", "Keanu Reeves") a director or top-billed actor of the movie? */
+export function featuresPerson(movie: Movie, name: string): boolean {
+  const said = nameWords(name);
+  if (!said.length) return false;
+  return [...(movie.directors ?? []), ...(movie.cast ?? [])].some((credit) => {
+    const words = nameWords(credit);
+    return said.every((w) => words.includes(w));
+  });
 }
 
-/** Drop movies that may not be suggested (already suggested, rejected/seen, disliked genre). Keeps order. */
+/* ---- filters ---- */
+
+/** Movies that may be suggested: not suggested, seen, turned down or liked already; inside every filter. */
 export function eligible(is: IS, movies: Movie[]): Movie[] {
-  const out = new Set([...is.recommended.map((m) => m.id), ...is.rejected.map((r) => r.id)]);
-  return movies.filter((m) => !out.has(m.id) && !m.genres.some((g) => is.dislikes.genres.includes(g)));
+  const out = new Set([...is.recommended.map((m) => m.id), ...is.rejected.map((r) => r.id), ...is.seeds.map((m) => m.id)]);
+  const { year, language } = is.constraints;
+  const unwanted = is.people.filter((p) => p.negated);
+  return movies.filter(
+    (m) =>
+      !out.has(m.id) &&
+      !m.genres.some((g) => is.avoidGenres.includes(g)) &&
+      !unwanted.some((p) => featuresPerson(m, p.name)) &&
+      (year.min === undefined || (m.year !== undefined && m.year >= year.min)) &&
+      (year.max === undefined || (m.year !== undefined && m.year <= year.max)) &&
+      (!language || m.language === language)
+  );
 }
 
-const byScore = (scored: { movie: Movie; index: number; score: number }[]) =>
-  scored.sort((a, b) => b.score - a.score || a.index - b.index).map((x) => x.movie);
+/* ---- similarity, cached per pool and query vector (both stay the same objects across turns) ---- */
 
-/** Eligible movies, best weighted score first (stable on ties). */
-export const rank = (is: IS, movies: Movie[]): Movie[] =>
-  byScore(eligible(is, movies).map((movie, index) => ({ movie, index, score: movieScore(is, movie).total })));
+const norms = new WeakMap<Float32Array, number>();
+function norm(v: Float32Array): number {
+  let n = norms.get(v);
+  if (n === undefined) {
+    n = 0;
+    for (let i = 0; i < v.length; i++) n += v[i] * v[i];
+    n = Math.sqrt(n);
+    norms.set(v, n);
+  }
+  return n;
+}
 
-/** Blend embedding similarity into the weighted baseline. */
-export function rankWithSemantics(is: IS, movies: Movie[], semantic: Map<number, number>): Movie[] {
-  const pool = eligible(is, movies);
-  const vals = pool.flatMap((m) => (semantic.has(m.id) ? [semantic.get(m.id)!] : []));
-  if (!vals.length) return rank(is, movies);
-  // Raw cosine scores cluster in a narrow band; stretch them over 0..1 so they can actually reorder candidates.
-  const lo = Math.min(...vals), hi = Math.max(...vals);
-  const norm = (v: number) => (hi > lo ? (v - lo) / (hi - lo) : neutral);
-  return byScore(pool.map((movie, index) => ({
-    movie, index,
-    score:
-      semanticWeight * (semantic.has(movie.id) ? norm(semantic.get(movie.id)!) : 0) + // no overview: no invented match
-      (1 - semanticWeight) * movieScore(is, movie).total,
-  })));
+/** Cosine similarity of `q` to every pool movie, aligned with `pool.movies` (0 for a movie without a vector). */
+const simCache = new WeakMap<Pool, WeakMap<Float32Array, Float32Array>>();
+function similarities(pool: Pool, q: Float32Array): Float32Array {
+  let byQuery = simCache.get(pool);
+  if (!byQuery) simCache.set(pool, (byQuery = new WeakMap()));
+  let sims = byQuery.get(q);
+  if (!sims) {
+    sims = new Float32Array(pool.movies.length);
+    const nq = norm(q);
+    pool.movies.forEach((m, i) => {
+      const v = pool.vectors.get(m.id);
+      if (!v || v.length !== q.length || !nq) return;
+      let dot = 0;
+      for (let k = 0; k < v.length; k++) dot += q[k] * v[k];
+      sims![i] = dot / (nq * norm(v));
+    });
+    byQuery.set(q, sims);
+  }
+  return sims;
+}
+
+/** Rank of each value among all of them, as 0..1 (the highest is 1). */
+function percentiles(values: number[]): number[] {
+  const order = values.map((v, i) => [v, i] as const).sort((a, b) => a[0] - b[0]);
+  const pct = new Array<number>(values.length);
+  order.forEach(([, i], rank) => (pct[i] = values.length > 1 ? rank / (values.length - 1) : 1));
+  return pct;
+}
+
+/** 0 below percentile `from`, rising to 1 at the top. */
+const ramp = (pct: number, from: number) => Math.max(0, (pct - from) / (1 - from));
+
+/** Every eligible movie of the pool, best first, with the terms of its score. */
+export function rankPool(is: IS, pool: Pool, q: QueryVectors): Scored[] {
+  const index = new Map(pool.movies.map((m, i) => [m.id, i]));
+  const movies = eligible(is, pool.movies);
+  /** Percentiles within the eligible movies of the similarity to `v`. */
+  const pctOf = (v: Float32Array) => {
+    const sims = similarities(pool, v);
+    return percentiles(movies.map((m) => sims[index.get(m.id)!]));
+  };
+
+  const semanticSources = [...(q.wish ? [q.wish] : []), ...q.seeds].map(pctOf);
+  const avoids = q.avoid.map(pctOf);
+  const turnedDown = is.rejected.flatMap((r) => {
+    const v = r.reason === "no" ? pool.vectors.get(r.id) : undefined;
+    return v ? [pctOf(v)] : [];
+  });
+  const popularity = percentiles(movies.map((m) => m.votes));
+  const wantedGenres = new Set(is.genres);
+  const wantedPeople = is.people.filter((p) => !p.negated);
+
+  const scored = movies.map((movie, i): Scored => {
+    const semantic = semanticSources.length ? Math.max(...semanticSources.map((p) => p[i])) : 0;
+    const genres = wantedGenres.size ? movie.genres.filter((g) => wantedGenres.has(g)).length / wantedGenres.size : 0;
+    const avoid = Math.max(0, ...avoids.map((p) => R.avoid.weight * ramp(p[i], R.avoid.from)));
+    const reject = Math.max(0, ...turnedDown.map((p) => R.reject.weight * ramp(p[i], R.reject.from)));
+    const person = wantedPeople.some((p) => featuresPerson(movie, p.name)) ? R.person : 0;
+    const score =
+      R.weights.semantic * semantic + R.weights.genres * genres + R.weights.popularity * popularity[i] - avoid - reject + person;
+    return { movie, score, semantic, genres, popularity: popularity[i], avoid, reject, person };
+  });
+  // Ties (e.g. no taste yet) keep the pool's order.
+  return scored.sort((a, b) => b.score - a.score);
 }

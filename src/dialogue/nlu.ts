@@ -2,7 +2,8 @@ import { understandSystem } from "../config/prompts";
 import { settings } from "../config/settings";
 import { lastSuggested, stateSummary } from "../core/state";
 import type { InformationState, LlmClient, Move } from "../core/types";
-import { ground, isAffirmation } from "./grounding";
+import { isDebug } from "../core/util";
+import { ground, isAffirmation, repairMoves } from "./grounding";
 
 const str = (x: unknown) => (typeof x === "string" && x.trim() ? x.trim() : undefined);
 
@@ -11,14 +12,13 @@ const str = (x: unknown) => (typeof x === "string" && x.trim() ? x.trim() : unde
  * knows. The model often copies a name it was shown, and an unknown slot would silently do nothing.
  */
 const SLOT_ALIASES: Record<string, string> = {
-  avoidgenres: "dislikes", avoid: "dislikes", dislike: "dislikes", dislikes: "dislikes", dislikedgenres: "dislikes",
+  wish: "wish", taste: "wish",
   wantedgenres: "genres", wanted: "genres", genre: "genres", genres: "genres",
-  runtime: "runtime", maxruntimeminutes: "runtime", minruntimeminutes: "runtime", runtimeminutes: "runtime", length: "runtime", time: "runtime",
+  avoidgenres: "avoidGenres", dislikes: "avoidGenres", dislike: "avoidGenres", dislikedgenres: "avoidGenres",
+  avoid: "avoid", avoids: "avoid",
+  people: "people", person: "people", wantedpeople: "people", avoidpeople: "people", actors: "people", director: "people",
   year: "year", era: "year", fromyear: "year", toyear: "year",
-  rating: "rating", minrating: "rating",
   language: "language", originallanguage: "language",
-  vibe: "vibe", vibes: "vibe",
-  all: "all", everything: "all",
 };
 const slotName = (raw: string): string => SLOT_ALIASES[raw.toLowerCase().replace(/[^a-z]/g, "")] ?? raw;
 
@@ -26,24 +26,27 @@ const slotName = (raw: string): string => SLOT_ALIASES[raw.toLowerCase().replace
 function clean(m: any): Move | null {
   if (!m || typeof m !== "object") return null;
   switch (m.type) {
+    case "wish":
+    case "avoid": {
+      const text = str(m.text);
+      return text ? { type: m.type, text } : null;
+    }
     case "prefer": {
       const genre = str(m.genre);
-      const mood = str(m.mood);
-      return genre || mood ? { type: "prefer", genre, mood, negated: m.negated === true } : null;
+      return genre ? { type: "prefer", genre, negated: m.negated === true } : null;
+    }
+    case "person": {
+      const name = str(m.name);
+      return name ? { type: "person", name, negated: m.negated === true } : null;
     }
     case "constrain": {
-      if (!["runtime", "year", "rating", "language"].includes(m.slot)) return null;
+      if (!["runtime", "year", "language"].includes(m.slot)) return null;
       if (!["lte", "gte", "eq"].includes(m.op)) return null;
-      const value = typeof m.value === "number" ? m.value : str(m.value);
+      // A runtime request only points to tonight's settings, so "shorter" without a number counts too.
+      const value = typeof m.value === "number" ? m.value : (str(m.value) ?? (m.slot === "runtime" && m.value == null ? "unspecified" : undefined));
       // A zero or negative limit is nonsense (a model's way of saying "no limit"): drop it.
       if (typeof value === "number" && value <= 0) return null;
       return value === undefined ? null : { type: "constrain", slot: m.slot, op: m.op, value };
-    }
-    case "adjust": {
-      const direction = str(m.direction);
-      return direction && ["tone", "runtime", "era", "rating"].includes(m.dimension)
-        ? { type: "adjust", dimension: m.dimension, direction }
-        : null;
     }
     case "like": {
       const title = str(m.title);
@@ -56,12 +59,6 @@ function clean(m: any): Move | null {
       const slot = str(m.slot);
       return slot ? { type: "retract", slot: slotName(slot) } : null;
     }
-    case "vibe": {
-      const text = str(m.text);
-      return text ? { type: "vibe", text } : null;
-    }
-    case "restart":
-      return { type: "restart" };
     case "accept":
       return { type: "accept" };
     default:
@@ -91,7 +88,8 @@ export async function understand(llm: LlmClient, text: string, is: InformationSt
     settings.llm.understand
   );
   const raw: unknown[] = Array.isArray(out?.moves) ? out.moves : [];
-  const moves = raw.map(clean).filter((m): m is Move => m !== null);
+  if (isDebug()) console.log(`[NLU raw] ${JSON.stringify(raw)}`);
+  const moves = repairMoves(raw.map(clean).filter((m): m is Move => m !== null), is.wish, raw);
   const lastTurn = is.history[is.history.length - 1];
-  return ground(moves, text, lastTurn?.speaker === "sys" ? lastTurn.text : undefined, suggested);
+  return ground(moves, text, lastTurn?.speaker === "sys" ? lastTurn.text : undefined, suggested, is.wish);
 }

@@ -21,7 +21,7 @@ describe("scripted turns never call the LLM", () => {
 describe("guards on the LLM", () => {
   const early = () => {
     const is = freshIS();
-    is.prefs.genres = ["Adventure"];
+    is.genres = ["Adventure"];
     is.candidates = [movie];
     is.history = [{ speaker: "sys", text: utterances.opening(is.intake) }, { speaker: "usr", text: "adventure" }];
     return is;

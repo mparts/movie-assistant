@@ -1,6 +1,6 @@
 import { respondModes, respondSystem, utterances } from "../config/prompts";
 import { settings } from "../config/settings";
-import { hasSignal, hasTaste, stateSummary, tasteProfile } from "../core/state";
+import { hasTaste, stateSummary, tasteProfile } from "../core/state";
 import { recommendationReadiness } from "../core/readiness";
 import type { InformationState, LlmClient, Reply } from "../core/types";
 
@@ -29,8 +29,7 @@ export async function respond(llm: LlmClient, is: InformationState): Promise<Rep
         : "recommend";
   // Candidates are withheld unless we're in recommend mode: the LLM cannot pick one early.
   const pool = mode === "recommend" ? is.candidates.slice(0, d.candidatesShown) : [];
-  const status =
-    is.search.status === "failed" ? "error" : !hasSignal(is) || !hasTaste(is) ? "none_yet" : pool.length ? "ok" : "empty";
+  const status = !hasTaste(is) ? "none_yet" : pool.length ? "ok" : "empty";
 
   const messages = [
     { role: "system" as const, content: `${respondSystem}\n${respondModes[mode]}` },

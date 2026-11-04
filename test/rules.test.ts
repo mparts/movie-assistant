@@ -1,6 +1,5 @@
 import { describe, expect, test } from "vitest";
 import { notices } from "../src/config/prompts";
-import { settings } from "../src/config/settings";
 import { rules } from "../src/core/rules";
 import { freshIS } from "./fixtures";
 import type { InformationState as IS, Move, Movie } from "../src/core/types";
@@ -17,44 +16,21 @@ const heard = (moves: Move[], setup: (is: IS) => void = () => {}): IS => {
 /** Run a rule: the new state if it applies, undefined if not. */
 const run = (name: string, is: IS): IS | undefined => rules[name]({ is })?.();
 
-describe("rules: preferences and search", () => {
-  test("a negated genre moves from wanted to disliked, and the search becomes stale", () => {
-    const is = heard([{ type: "prefer", genre: "Horror", negated: true }], (s) => {
-      s.prefs.genres = ["Horror", "Comedy"];
+describe("rules: taste", () => {
+  test("the latest wish replaces the old one; a negated genre moves from wanted to avoided", () => {
+    const is = heard([{ type: "wish", text: "A funny heist." }, { type: "prefer", genre: "comedies", negated: true }], (s) => {
+      s.wish = "A heist.";
+      s.genres = ["Comedy", "Crime"];
     });
-    const next = run("integrate_prefer", is)!;
-    expect(next.prefs.genres).toEqual(["Comedy"]);
-    expect(next.dislikes.genres).toEqual(["Horror"]);
-    expect(next.search.status).toBe("dirty");
+    const next = run("integrate_prefer", run("integrate_wish", is)!)!;
+    expect(next.wish).toBe("A funny heist.");
+    expect([next.genres, next.avoidGenres]).toEqual([["Crime"], ["Comedy"]]);
   });
 
-  test("the search is marked stale only when the TMDB query really changes", () => {
-    const setup = (s: IS) => {
-      s.constraints.runtime = { max: 100 };
-      s.candidates = [movie(1, "A")];
-    };
-    // same limit again: nothing changes, candidates stay
-    const same = run("integrate_constrain", heard([{ type: "constrain", slot: "runtime", op: "lte", value: 100 }], setup))!;
-    expect(same.search.status).toBe("idle");
-    expect(same.candidates).toHaveLength(1);
-    // a different limit: stale, candidates dropped, restart from the first batch
-    const changed = run("integrate_constrain", heard([{ type: "constrain", slot: "runtime", op: "lte", value: 90 }], setup))!;
-    expect(changed.constraints.runtime.max).toBe(90);
-    expect(changed.search).toEqual({ status: "dirty", page: 1, noMore: false });
-    expect(changed.candidates).toEqual([]);
-  });
-
-
-
-  test("next_page fires below the batch limit and stops at it", () => {
-    const at = (page: number) =>
-      heard([], (s) => {
-        s.prefs.genres = ["Comedy"];
-        s.search.page = page;
-      });
-    const max = settings.search.maxBatches;
-    expect(run("next_page", at(max - 1))!.search).toEqual({ status: "dirty", page: max, noMore: false });
-    expect(run("next_page", at(max))).toBeUndefined();
+  test("time is tonight's setting: a runtime request changes nothing but tells Jake so", () => {
+    const next = run("integrate_constrain", heard([{ type: "constrain", slot: "runtime", op: "lte", value: 90 }]))!;
+    expect(next.constraints).toEqual({ year: {} });
+    expect(next.private.notices).toEqual([notices.timeInSettings]);
   });
 });
 
@@ -70,23 +46,6 @@ describe("rules: suggestion streak", () => {
   });
 });
 
-describe("rules: restart", () => {
-  test("a restart forgets preferences but keeps the conversation history, and says so", () => {
-    const is = heard([{ type: "restart" }], (s) => {
-      s.history = [{ speaker: "usr", text: "hi" }];
-      s.prefs.genres = ["Comedy"];
-      s.vibe = ["cozy"];
-      s.constraints.runtime = { max: 90 };
-    });
-    const next = run("integrate_restart", is)!;
-    expect(next.history).toEqual([{ speaker: "usr", text: "hi" }]);
-    expect(next.prefs.genres).toEqual([]);
-    expect(next.vibe).toEqual([]);
-    expect(next.constraints.runtime).toEqual({});
-    expect(next.private.notices).toEqual([notices.restarted]);
-  });
-});
-
 describe("rules: naming a movie", () => {
   // Found while writing these tests: findMovie matches titles by substring in both directions, so a short
   // title inside a longer one is matched by mistake. Remove `.fails` once findMovie is fixed.
@@ -96,89 +55,4 @@ describe("rules: naming a movie", () => {
     });
     expect(run("integrate_seen_reject", is)!.rejected).toEqual([]);
   });
-
-
-  test("rejecting a movie saves a snapshot of it and sinks its siblings in the same turn", () => {
-    const withGenres = (id: number, title: string, genres: string[]): Movie => ({ ...movie(id, title), genres });
-    const is = heard([{ type: "reject" }], (s) => {
-      s.recommended = [withGenres(1, "Turned down", ["Comedy", "Crime"])];
-      s.candidates = [withGenres(2, "Sibling", ["Comedy", "Crime"]), withGenres(3, "Other", ["Drama"])];
-    });
-    const next = run("integrate_seen_reject", is)!;
-    expect(next.rejected).toEqual([{ id: 1, reason: "no", genres: ["Comedy", "Crime"], overview: "" }]);
-    expect(next.candidates.map((m) => m.id)).toEqual([3, 2]); // before the rejection they were [2, 3]
-  });
-});
-
-describe("rules: moods the lexicon does not know", () => {
-  /** What the dialogue manager does with a user turn, for the two rules involved. */
-  const hear = (moves: Move[], setup?: (is: IS) => void) => run("integrate_vibe", run("integrate_prefer", heard(moves, setup))!)!;
-
-  test("'goofy' is kept as a vibe and also ranks Comedy, softly", () => {
-    const next = hear([{ type: "prefer", mood: "goofy" }]);
-    expect(next.vibe).toEqual(["goofy"]);
-    expect(next.prefs.genres).toEqual(["Comedy"]);
-    expect(next.prefs.required).toEqual([]);
-    expect(next.search.status).toBe("dirty");
-  });
-
-  test("a word in no table is kept as a vibe only, and as the first signal it starts the search", () => {
-    const next = hear([{ type: "prefer", mood: "cozy" }]);
-    expect(next.vibe).toEqual(["cozy"]);
-    expect(next.prefs.genres).toEqual([]);
-    expect(next.search.status).toBe("dirty");
-  });
-
-  test("a mapped mood never becomes a required genre, even next to a required one", () => {
-    const next = hear([{ type: "prefer", mood: "heartfelt" }], (s) => {
-      s.prefs.genres = ["Romance"];
-      s.prefs.required = ["Romance"];
-    });
-    expect(next.prefs.genres).toEqual(["Romance", "Drama"]);
-    expect(next.prefs.required).toEqual(["Romance"]);
-    expect(next.vibe).toEqual(["heartfelt"]);
-  });
-
-
-  test("a negated unknown mood is not turned into its opposite: nothing is stored", () => {
-    const is = heard([{ type: "prefer", mood: "goofy", negated: true }]);
-    const afterPrefer = run("integrate_prefer", is)!;
-    expect(afterPrefer.dislikes.genres).toEqual([]);
-    expect(rules.integrate_vibe({ is: afterPrefer })).toBeUndefined();
-  });
-
-
-});
-
-describe("rules: combined genres", () => {
-  test("'romantic comedy' requires both genres; a multi-genre mood only adds alternatives", () => {
-    const next = run("integrate_prefer", heard([{ type: "prefer", mood: "romantic", genre: "Comedy" }]))!;
-    expect(next.prefs.required).toEqual(["Romance", "Comedy"]);
-    expect(next.search.status).toBe("dirty");
-
-    const exciting = run("integrate_prefer", heard([{ type: "prefer", mood: "exciting" }]))!;
-    expect(exciting.prefs.genres).toEqual(["Action", "Thriller", "Adventure"]);
-    expect(exciting.prefs.required).toEqual([]);
-  });
-
-
-  /** After a search for these required genres that found `total` movies. */
-  const searched = (required: string[], total: number) =>
-    heard([], (s) => {
-      s.prefs.genres = [...required];
-      s.prefs.required = [...required];
-      s.search = { status: "idle", page: 1, noMore: total === 0, total };
-    });
-
-  test("a combination with hardly any matches falls back to any of the genres, with a notice", () => {
-    const next = run("relax_genres", searched(["Western", "Music"], 4))!;
-    expect(next.prefs.required).toEqual([]);
-    expect(next.prefs.genres).toEqual(["Western", "Music"]);
-    expect(next.search).toEqual({ status: "dirty", page: 1, noMore: false });
-    expect(next.private.notices).toEqual([notices.genresRelaxed(["Western", "Music"])]);
-    // and the next search asks for either genre
-    expect(run("relax_genres", next)).toBeUndefined();
-  });
-
-
 });

@@ -1,7 +1,7 @@
 /**
  * Embeds the movie catalogue ahead of time: every TMDB movie with at least `catalogue.minVotes` votes and at least
- * `intake.minMinutes` minutes, so any Phase 1 pool is (nearly) all embedded already. Saves a record, keywords and a
- * vector per movie in `.cache/`. Run again to top up: only new movies get keywords fetched, and only new or changed
+ * `intake.minMinutes` minutes, so any Phase 1 pool is (nearly) all embedded already. Saves a record (with runtime, directors
+ * and cast), keywords and a vector per movie in `.cache/`. Run again to top up: only new movies get details fetched, and only new or changed
  * texts get embedded. No LLM calls.
  *
  *   npm run embed-catalogue
@@ -21,9 +21,7 @@ const tmdb = createTmdb({
   minVotes: settings.catalogue.minVotes,
 });
 
-const movies = await tmdb.pool({
-  genres: [], matchAll: false, excludeGenres: [], runtime: { min: settings.intake.minMinutes }, year: {}, page: 1,
-});
+const movies = await tmdb.pool({ excludeGenres: [], runtime: { min: settings.intake.minMinutes }, year: {} });
 const withText = movies.filter((m) => m.overview.trim()).length;
 console.log(`TMDB: ${movies.length} movies (${movies.length - withText} without an overview, skipped) · ${secs()}`);
 
@@ -31,7 +29,7 @@ const catalogue = openCatalogue();
 console.log(`Catalogue: ${catalogue.records.size} records, ${catalogue.store.size} vectors (${embCfg.model})`);
 let t = Date.now();
 const { vectors, embedded } = await ensureVectors(movies, catalogue, tmdb, {
-  onKeywords: (done, total) => console.log(`  keywords: ${done} / ${total} fetched · ${secs(t)}`),
+  onDetails: (done, total) => console.log(`  details: ${done} / ${total} fetched · ${secs(t)}`),
   onProgress: (done, total) => {
     const eta = ((Date.now() - t) / done) * (total - done);
     console.log(`  ${done} / ${total} embedded · ${secs(t)} · about ${Math.ceil(eta / 60000)} min left`);

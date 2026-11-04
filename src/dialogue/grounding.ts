@@ -1,11 +1,11 @@
 /**
  * Checks on what the LLM extracted, using only the user's own words. Small models sometimes copy the assistant's
- * words into the user's moves ("yes this one" → vibes the assistant just said) or attach a "no" to the wrong thing
+ * words into the user's moves ("yes this one" → a wish the assistant just said) or attach a "no" to the wrong thing
  * ("no I don't like this, maybe something more funny" → no Comedy). A move the user's words do not support is
  * dropped, never changed.
  */
 import { settings } from "../config/settings";
-import { resolvePreference, wordsFor } from "../core/lexicon";
+import { resolveGenres, wordsFor } from "../core/lexicon";
 import type { Move } from "../core/types";
 
 /** Lowercase words: apostrophes removed ("don't" → "dont"), everything else that is not a letter or digit is a gap. */
@@ -79,32 +79,73 @@ function negatedAt(said: string[], p: number): boolean {
   return false;
 }
 
-/** A negated genre/mood needs the word in the user's utterance, and a "no" right before it. */
+/** A negated genre needs the word (or an alias) in the user's utterance, and a "no" right before it. */
 function negationSupported(m: Extract<Move, { type: "prefer" }>, utterance: string): boolean {
   const said = clauseWords(utterance);
-  const named = [m.genre, m.mood].filter((t): t is string => !!t?.trim());
-  const terms = new Set([
-    ...named.map((t) => words(t).join(" ")),
-    ...wordsFor(named.flatMap((t) => resolvePreference(t).names)),
-  ]);
+  const terms = new Set([words(m.genre).join(" "), ...wordsFor(resolveGenres(m.genre))]);
   return positions(said, [...terms]).some((p) => negatedAt(said, p));
 }
 
+/** "without office settings", "a non-horror movie": what they don't want belongs in avoid, not the wish. */
+const NEGATED_WISH = /\b(no|not|without|never|non)\b|n't\b/i;
+/** A wish that ENDS in a negated part: "A scary ghost story, but not gory." → wish + the thing to avoid. */
+const NEGATED_TAIL = /[,;]?\s*(?:\b(?:but|and)\s+)?(?:\bnot(?:\s+too)?|\bno|\bwithout|\bnever)\b\s+(.+?)\s*[.!]?\s*$/i;
+
+/**
+ * Repairs the model's two common slips on the way to the rules: a negated tail in the wish is split off into an avoid,
+ * and a relative tone request (an `adjust` move "goofier", which the prompt no longer offers but small models still
+ * produce, and which `clean` drops) is folded into the wish. Anything else is left as it is.
+ */
+export function repairMoves(moves: Move[], wish: string, raw: unknown[]): Move[] {
+  const out: Move[] = [];
+  for (const m of moves) {
+    const tail = m.type === "wish" ? m.text.match(NEGATED_TAIL) : null;
+    const head = m.type === "wish" && tail ? m.text.slice(0, tail.index).trim() : "";
+    if (tail && head && !NEGATED_WISH.test(head)) {
+      out.push({ type: "wish", text: /[.!?]$/.test(head) ? head : `${head}.` }, { type: "avoid", text: tail[1] });
+    } else out.push(m);
+  }
+  for (const r of raw as { type?: unknown; dimension?: unknown; direction?: unknown }[]) {
+    const dir = typeof r?.direction === "string" ? r.direction.trim() : "";
+    if (r?.type !== "adjust" || !dir || ["era", "rating", "runtime"].includes(String(r.dimension))) continue; // not a tone
+    const i = out.findIndex((m) => m.type === "wish");
+    const base = i >= 0 ? (out[i] as Extract<Move, { type: "wish" }>).text : wish;
+    if (mentions(base, dir)) continue;
+    const text = `${base ? `${base} ` : ""}${dir[0].toUpperCase()}${dir.slice(1)}.`;
+    if (i >= 0) out[i] = { type: "wish", text };
+    else out.push({ type: "wish", text });
+  }
+  return out;
+}
+
+/**
+ * Did these words come from the assistant rather than the user? True when all of `fresh` are in the assistant's
+ * last turn and none in the user's words: "cozy" offered by Jake and answered with "the second one, please".
+ */
+const copied = (fresh: string[], utterance: string, lastSystem: string | undefined) =>
+  !!lastSystem && fresh.length > 0 && fresh.every((x) => mentions(lastSystem, x)) && !fresh.some((x) => mentions(utterance, x));
+
 /**
  * `utterance`: what the user just said. `lastSystem`: the assistant's last turn, if any.
- * `suggested`: the movie the assistant last suggested, if any.
+ * `suggested`: the movie the assistant last suggested, if any. `wish`: the wish so far.
  */
-export function ground(moves: Move[], utterance: string, lastSystem: string | undefined, suggested: string | null): Move[] {
+export function ground(moves: Move[], utterance: string, lastSystem: string | undefined, suggested: string | null, wish = ""): Move[] {
   return moves.filter((m) => {
     switch (m.type) {
       case "like":
         return titleSaid(m.title, utterance);
-      case "vibe": {
+      case "person":
+        return titleSaid(m.name, utterance);
+      case "wish": {
         if (words(m.text).every((w) => HEDGE.has(w))) return false; // "not sure yet" is not a taste
-        // All its words come from the assistant's last turn, none from the user's: the assistant's words, not theirs.
-        const w = content(m.text);
-        return !(lastSystem && w.length && w.every((x) => mentions(lastSystem, x)) && !w.some((x) => mentions(utterance, x)));
+        // A negation in the wish ranks the very thing they refused first (step 5 spike): keep the previous wish.
+        if (NEGATED_WISH.test(m.text)) return false;
+        // Only the words the rewrite adds to the old wish count. A bare "yes" to Jake's proposal takes it.
+        const fresh = content(m.text).filter((x) => !mentions(wish, x));
+        return isAffirmation(utterance) || !copied(fresh, utterance, lastSystem);
       }
+      case "avoid":
+        return !words(m.text).every((w) => HEDGE.has(w)) && !copied(content(m.text), utterance, lastSystem);
       case "prefer":
         return m.negated ? negationSupported(m, utterance) : true;
       case "accept":

@@ -9,10 +9,9 @@
     "preview": "vite preview",
     "test": "vitest",
     "typecheck": "tsc --noEmit",
-    "probe": "tsx scripts/probe.ts",
     "chat": "tsx scripts/chat.ts",
     "nlu-bench": "tsx scripts/nlu-bench.ts",
-    "spike": "tsx scripts/spike-semantic.ts",
+    "rank-bench": "tsx scripts/rank-bench.ts",
     "embed-catalogue": "tsx scripts/embed-catalogue.ts"
   },
   "devDependencies": {

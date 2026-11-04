@@ -2,18 +2,17 @@
  * Dialogue Manager Engine (xstate). One turn = Select (say something) → Update (hear + integrate + retrieve).
  *   Select:  respond() → one `say` move, sent to the parent.
  *   Update:  Init → Grounding (wait for SAYS) → Understand (LLM) → Integrate (rule chain)
- *            → Retrieve (seed lookup / TMDB search loop) → SemanticRank (optional) → Done.
+ *            → Retrieve (look up liked movies → embed new wish/avoid texts → rank tonight's pool) → Done.
+ * Ranking is local and synchronous (core/ranking.ts): no TMDB search during the chat.
  */
 import { AnyTransitionConfig, assign, fromPromise, sendTo, setup } from "xstate";
 import { notices, utterances } from "../config/prompts";
-import { settings } from "../config/settings";
-import { rankWithSemantics } from "../core/ranking";
-import { applyFailure, applyResults, applySeed, rules } from "../core/rules";
-import { criteriaFromIS, hasSignal, tasteProfile } from "../core/state";
+import type { VectorSource } from "../core/pool";
+import { applyFailure, applyRanking, applySeed, rules } from "../core/rules";
 import type {
-  DMEContext, DMEEvent, InformationState, LlmClient, Move, Movie, Reply, SaysMovesEvent, SearchCriteria, TmdbClient,
+  DMEContext, DMEEvent, EmbedQuery, InformationState, LlmClient, Move, Movie, Reply, SaysMovesEvent, TmdbClient,
 } from "../core/types";
-import { flushTimings, isDebug, last, timed } from "../core/util";
+import { flushTimings, isDebug, timed, timedSync } from "../core/util";
 import { respond } from "./respond";
 import { understand } from "./nlu";
 
@@ -48,18 +47,30 @@ const withNotice = (is: InformationState, text: string): InformationState => ({
 });
 
 const INTEGRATE_RULES = [
-  "integrate_retry_failed",
-  "integrate_restart",
+  "integrate_wish",
+  "integrate_avoid",
   "integrate_prefer",
+  "integrate_person",
   "integrate_constrain",
-  "integrate_adjust",
   "integrate_retract",
-  "integrate_vibe",
   "integrate_like",
   "integrate_seen_reject",
   "integrate_recommend",
-  "filter_candidates",
 ];
+
+/** Cache keys in `context.vectors`: a query text (wish or avoid), or a liked movie. */
+const textKey = (text: string) => `q:${text}`;
+const movieKey = (id: number) => `movie:${id}`;
+
+/** Wish and avoid texts that have no query vector yet. */
+const unembedded = (c: DMEContext) => [c.is.wish, ...c.is.avoid].filter((t) => t && !c.vectors.has(textKey(t)));
+
+/** The query side of the ranking, from the cache (anything missing is simply left out). */
+const queryVectors = (c: DMEContext) => ({
+  wish: c.is.wish ? c.vectors.get(textKey(c.is.wish)) : undefined,
+  seeds: c.is.seeds.flatMap((m) => c.vectors.get(movieKey(m.id)) ?? []),
+  avoid: c.is.avoid.flatMap((t) => c.vectors.get(textKey(t)) ?? []),
+});
 
 export const dme = setup({
   types: {} as { input: DMEContext; context: DMEContext; events: DMEEvent },
@@ -72,15 +83,7 @@ export const dme = setup({
     latestSpeakerIsUsr: ({ context }) => context.latest_speaker === "usr",
     latestSpeakerIsSys: ({ context }) => context.latest_speaker === "sys",
     seedPending: ({ context }) => context.is.private.agenda.some((a) => a.type === "resolve_seed"),
-    // Genres alone are handled by TMDB + the weighted score; embed only with a vibe or a liked movie.
-    canSemanticRank: ({ context: c }) =>
-      !!c.embedder &&
-      (c.is.vibe.length > 0 || c.is.prefs.seeds.length > 0) &&
-      !!tasteProfile(c.is) &&
-      c.is.candidates.length > 0 &&
-      c.latest_speaker === "usr" &&
-      last(c.is.history)?.text !== settings.dialogue.silenceMarker,
-    needSearch: ({ context }) => context.is.search.status === "dirty" && hasSignal(context.is),
+    needVectors: ({ context }) => unembedded(context).length > 0,
   },
   actions: {
     sendBackNextMoves: sendTo(
@@ -114,17 +117,23 @@ export const dme = setup({
     respond: fromPromise(async ({ input }: { input: { llm: LlmClient; is: InformationState } }) =>
       timed("respond", () => respond(input.llm, input.is))
     ),
-    semanticRank: fromPromise(
-      async ({ input }: { input: { embedder: NonNullable<DMEContext["embedder"]>; profile: string; movies: Movie[] } }) =>
-        timed("embeddings", () => input.embedder.score(input.profile, input.movies))
+    /** Query vectors for new wish and avoid texts (about 40 ms each). */
+    embed: fromPromise(async ({ input }: { input: { embedQuery: EmbedQuery; texts: string[] } }) =>
+      timed("embeddings", async () => {
+        const out = new Map<string, Float32Array>();
+        for (const t of input.texts) out.set(t, await input.embedQuery(t));
+        return out;
+      })
     ),
-    /** TMDB title lookup for "something like X". */
-    resolveSeed: fromPromise(async ({ input }: { input: { tmdb: TmdbClient; title: string } }) =>
-      timed("TMDB", () => input.tmdb.searchMovie(input.title))
-    ),
-    /** TMDB discover with the current constraints. */
-    search: fromPromise(async ({ input }: { input: { tmdb: TmdbClient; criteria: SearchCriteria } }) =>
-      timed("TMDB", () => input.tmdb.discover(input.criteria))
+    /** "Something like X": TMDB title lookup, then the movie's catalogue copy and vector (embedded if new). */
+    resolveSeed: fromPromise(
+      async ({ input }: { input: { tmdb: TmdbClient; vectorsFor: VectorSource; title: string } }) =>
+        timed("TMDB", async () => {
+          const hit = await input.tmdb.searchMovie(input.title);
+          if (!hit) return null;
+          const { movies, vectors } = await input.vectorsFor([hit]);
+          return { movie: movies[0] ?? hit, vector: vectors.get(hit.id) };
+        })
     ),
   },
 }).createMachine({
@@ -214,7 +223,7 @@ export const dme = setup({
           },
         },
         Integrate: { ...ruleChain(INTEGRATE_RULES), onDone: "Retrieve" },
-        /** Only after a user turn. Loop: resolve pending seed titles → search if dirty → next page if the pool ran dry. */
+        /** Only after a user turn. Loop: look up liked movies → embed new texts → rank tonight's pool. */
         Retrieve: {
           initial: "Check",
           states: {
@@ -222,10 +231,8 @@ export const dme = setup({
               always: [
                 { guard: "latestSpeakerIsSys", target: "Done" },
                 { guard: "seedPending", target: "ResolveSeed" },
-                { guard: "needSearch", target: "Search" },
-                isuTransition("Check", "relax_genres"),
-                isuTransition("Check", "next_page"),
-                { target: "Done" },
+                { guard: "needVectors", target: "Embed" },
+                { target: "Rank" },
               ],
             },
             ResolveSeed: {
@@ -233,14 +240,18 @@ export const dme = setup({
                 src: "resolveSeed",
                 input: ({ context }) => ({
                   tmdb: context.tmdb,
+                  vectorsFor: context.vectorsFor,
                   title: context.is.private.agenda.find((a) => a.type === "resolve_seed")?.title ?? "",
                 }),
                 onDone: {
                   target: "Check",
                   actions: assign(({ context, event }) => {
-                    const is = applySeed(context.is, event.output as Movie | null);
+                    const found = event.output as { movie: Movie; vector?: Float32Array } | null;
+                    const is = applySeed(context.is, found?.movie ?? null);
                     logIS("resolve_seed", is);
-                    return { is };
+                    const vectors = new Map(context.vectors);
+                    if (found?.vector) vectors.set(movieKey(found.movie.id), found.vector);
+                    return { is, vectors };
                   }),
                 },
                 onError: {
@@ -252,55 +263,38 @@ export const dme = setup({
                 },
               },
             },
-            Search: {
+            Embed: {
               invoke: {
-                src: "search",
-                input: ({ context }) => ({ tmdb: context.tmdb, criteria: criteriaFromIS(context.is) }),
+                src: "embed",
+                input: ({ context }) => ({ embedQuery: context.embedQuery, texts: unembedded(context) }),
                 onDone: {
                   target: "Check",
                   actions: assign(({ context, event }) => {
-                    const { movies, total } = event.output as { movies: Movie[]; total: number };
-                    const is = applyResults(context.is, movies, total);
-                    logIS("search_result", is);
-                    return { is };
+                    const vectors = new Map(context.vectors);
+                    for (const [t, v] of event.output as Map<string, Float32Array>) vectors.set(textKey(t), v);
+                    return { vectors };
                   }),
                 },
+                // Without the vectors the ranking still works (genres, people, popularity); try again next turn.
                 onError: {
-                  target: "Check",
-                  actions: assign(({ context, event }) => {
-                    console.error("[TMDB search failed]", event.error);
-                    return { is: applyFailure(context.is) };
-                  }),
+                  target: "Rank",
+                  actions: ({ event }) => console.warn("[embeddings unavailable; ranking without the wish this turn]", event.error),
                 },
+              },
+            },
+            Rank: {
+              always: {
+                target: "Done",
+                actions: assign(({ context }) => {
+                  const is = timedSync("rank", () => applyRanking(context.is, context.pool, queryVectors(context)));
+                  logIS("rank_pool", is);
+                  return { is };
+                }),
               },
             },
             Done: { type: "final" },
           },
-          onDone: "SemanticGate",
-        },
-        SemanticGate: { always: [{ guard: "canSemanticRank", target: "SemanticRank" }, { target: "Done" }] },
-        SemanticRank: {
-          invoke: {
-            src: "semanticRank",
-            input: ({ context }) => ({
-              embedder: context.embedder!,
-              profile: tasteProfile(context.is)!,
-              movies: context.is.candidates,
-            }),
-            onDone: {
-              target: "Done",
-              actions: assign(({ context, event }) => ({
-                is: {
-                  ...context.is,
-                  candidates: rankWithSemantics(context.is, context.is.candidates, event.output as Map<number, number>),
-                },
-              })),
-            },
-            onError: {
-              target: "Done",
-              actions: ({ event }) => console.warn("[semantic ranking unavailable; keeping weighted order]", event.error),
-            },
-          },
+          onDone: "Done",
         },
         Done: { type: "final" },
       },

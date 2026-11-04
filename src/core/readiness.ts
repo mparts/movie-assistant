@@ -6,14 +6,12 @@ import type { InformationState, Move } from "./types";
 export function evidenceFromMoves(moves: Move[]): string[] {
   return moves.flatMap((m): string[] => {
     switch (m.type) {
-      case "prefer": {
-        const what = (m.genre || m.mood)?.toLowerCase();
-        return what ? [`prefer:${m.negated ? "not:" : ""}${what}`] : [];
-      }
-      case "vibe": return [`vibe:${m.text.trim().toLowerCase()}`];
+      case "wish": return [`wish:${m.text.trim().toLowerCase()}`];
+      case "avoid": return [`avoid:${m.text.trim().toLowerCase()}`];
+      case "prefer": return [`prefer:${m.negated ? "not:" : ""}${m.genre.toLowerCase()}`];
+      case "person": return [`person:${m.negated ? "not:" : ""}${m.name.toLowerCase()}`];
       case "like": return [`like:${m.title.trim().toLowerCase()}`];
-      case "constrain": return [`constraint:${m.slot}:${m.op}:${m.value}`];
-      case "adjust": return [`adjust:${m.dimension}:${m.direction.toLowerCase()}`];
+      case "constrain": return m.slot === "runtime" ? [] : [`constraint:${m.slot}:${m.op}:${m.value}`];
       default: return [];
     }
   });

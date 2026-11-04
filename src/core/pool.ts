@@ -12,6 +12,12 @@ export interface Pool {
   ms: number;
 }
 
+/**
+ * The catalogue's copy of these movies (with details: runtime, credits) and their vectors. Node: the local catalogue;
+ * browser: the dev server. Movies without a vector are left out.
+ */
+export type VectorSource = (movies: Movie[]) => Promise<{ movies: Movie[]; vectors: Map<number, Float32Array>; embedded: number }>;
+
 /** Enough movies to talk about, too few (the user may go anyway), or none at all. */
 export type PoolCheck = "ok" | "small" | "empty";
 

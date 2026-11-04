@@ -1,22 +1,6 @@
 import { describe, expect, test } from "vitest";
-import { settings } from "../src/config/settings";
 import { constrain, retract } from "../src/core/constraints";
 import { freshIS } from "./fixtures";
-
-const tol = settings.adjust.runtimeExactTolerance;
-
-describe("constrain", () => {
-  test("a runtime limit sets max, a minimum sets min, an exact length makes a band around it", () => {
-    let is = constrain(freshIS(), { type: "constrain", slot: "runtime", op: "lte", value: 100 });
-    expect(is.constraints.runtime).toEqual({ max: 100 });
-    is = constrain(is, { type: "constrain", slot: "runtime", op: "gte", value: 80 });
-    expect(is.constraints.runtime).toEqual({ min: 80, max: 100 });
-    is = constrain(is, { type: "constrain", slot: "runtime", op: "eq", value: 90 });
-    expect(is.constraints.runtime).toEqual({ min: 90 - tol, max: 90 + tol });
-  });
-
-
-});
 
 describe("year bounds", () => {
   test("a new bound beyond the opposite one replaces it: 'recent, not the 90s' is not the empty range 2000-1999", () => {
@@ -28,20 +12,15 @@ describe("year bounds", () => {
   });
 });
 
-describe("adjust and retract", () => {
-
-  test("retracting the runtime clears it, \"all\" clears everything, an unknown slot changes nothing", () => {
+describe("retract", () => {
+  test("one slot clears only itself; an unknown slot changes nothing", () => {
     const is = freshIS();
-    is.constraints.runtime = { max: 90 };
-    is.constraints.rating = 7;
-    is.prefs.genres = ["Comedy"];
-    is.dislikes.genres = ["Horror"];
-    is.vibe = ["cozy"];
+    is.wish = "A cozy comedy.";
+    is.genres = ["Comedy"];
+    is.avoidGenres = ["Horror"];
+    is.people = [{ name: "Adam Sandler", negated: true }];
 
-    expect(retract(is, "runtime").constraints.runtime).toEqual({});
-    const all = retract(is, "all");
-    expect(all.constraints).toEqual({ runtime: {}, year: {} });
-    expect([all.prefs.genres, all.dislikes.genres, all.vibe]).toEqual([[], [], []]);
+    expect(retract(is, "avoidGenres")).toMatchObject({ avoidGenres: [], genres: ["Comedy"] });
     expect(retract(is, "nonsense")).toBe(is);
   });
 });
