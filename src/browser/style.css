@@ -43,7 +43,7 @@ header .tagline { color: var(--text-muted); letter-spacing: 1px; }
   flex-direction: column;
   gap: 12px;
 }
-.panel[hidden], [hidden] { display: none !important; }
+[hidden] { display: none !important; }
 
 h2 { font-family: var(--font-display); font-size: 28px; letter-spacing: 3px; font-weight: 400; }
 .q { color: var(--text); margin-top: 8px; }

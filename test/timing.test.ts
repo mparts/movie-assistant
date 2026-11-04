@@ -17,7 +17,4 @@ describe("per-turn timings", () => {
     const line = flushTimings()!;
     expect(line).toMatch(/^\[timing\] TMDB \d+ms \(2 calls\) · NLU \d+ms \(1 call\)$/);
   });
-
-
-
 });

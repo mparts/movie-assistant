@@ -7,7 +7,7 @@ import { settings } from "../config/settings";
 import type { Move } from "../core/types";
 
 /** Lowercase words: apostrophes removed ("don't" → "dont"), everything else that is not a letter or digit is a gap. */
-export const words = (s: string): string[] =>
+const words = (s: string): string[] =>
   s.toLowerCase().replace(/['’]/g, "").replace(/[^a-z0-9]+/g, " ").trim().split(" ").filter(Boolean);
 
 /** Only agreement, nothing else: "yes", "sounds good", "yeah why not, let's go with that". */
@@ -56,7 +56,7 @@ const REFUSAL =
  * no princesses and lots of laughs." gives the wish "A magical adventure with lots of laughs." and the avoid
  * "princesses". The wish is empty when nothing else is left.
  */
-export function splitRefusals(text: string): { wish: string; avoid: string[] } {
+function splitRefusals(text: string): { wish: string; avoid: string[] } {
   const avoid: string[] = [];
   let rest = text;
   for (let m = rest.match(REFUSAL); m?.groups; m = rest.match(REFUSAL)) {

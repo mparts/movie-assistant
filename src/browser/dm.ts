@@ -10,12 +10,12 @@ import { settings } from "../config/settings";
 import type { Intake } from "../core/intake";
 import { poolCheck, type Pool } from "../core/pool";
 import { initialIS } from "../core/state";
-import type { DMContext, DMEContext, DMEvent, NextMovesEvent } from "../core/types";
+import { spokenText } from "../core/util";
+import type { DMContext, DMEContext, DMEvent } from "../core/types";
 import { createClients } from "../services";
 import { fetchPool } from "../services/poolVectorsClient";
 import { createTurnLog, describePool, describeTonight, logState } from "../dialogue/debugView";
 import { dme } from "../dialogue/dme";
-import { nlg } from "../dialogue/nlg";
 
 const turnLog = createTurnLog();
 const clients = createClients("proxy", {}, { onLlmAnswer: turnLog.onLlmAnswer });
@@ -131,7 +131,7 @@ const dmMachine = setup({
                   target: "Speaking",
                   actions: [
                     ({ context }) => turnLog.turn(dmeContext()!, context.confidence),
-                    assign(({ event }) => ({ elisaSaid: nlg((event as NextMovesEvent).value) })),
+                    assign(({ event }) => ({ elisaSaid: spokenText(event.value) })),
                     sendTo("dmeID", ({ event }) => ({ type: "SAYS", value: { speaker: "sys", moves: event.value } })),
                   ],
                 },

@@ -8,11 +8,10 @@
 import { AnyTransitionConfig, assign, fromPromise, sendTo, setup } from "xstate";
 import { notices, utterances } from "../config/prompts";
 import { applyRanking, rules, withNotice } from "../core/rules";
-import type { DMEContext, DMEEvent, EmbedQuery, InformationState, LlmClient, Move, Reply, SaysMovesEvent, Understood } from "../core/types";
+import type { DMEContext, DMEEvent, EmbedQuery, InformationState, LlmClient, Move } from "../core/types";
 import { flushTimings, isDebug, timed, timedSync } from "../core/util";
 import { respond } from "./respond";
 import { understand } from "./nlu";
-
 
 const logIS = (what: string, is: InformationState) => {
   console.info(`[ISU ${what}]`);
@@ -36,7 +35,6 @@ function ruleChain(names: string[]) {
   states.Done = { type: "final" };
   return { initial: names[0], states } as any;
 }
-
 
 const INTEGRATE_RULES = [
   "integrate_wish",
@@ -64,7 +62,7 @@ export const dme = setup({
   guards: {
     isu: ({ context }, params: { name: string }) => !!rules[params.name](context),
     isUserSpeech: ({ event }) => {
-      const v = (event as SaysMovesEvent).value;
+      const v = event.value;
       return v.speaker === "usr" && !!v.text?.trim();
     },
     latestSpeakerIsUsr: ({ context }) => context.latest_speaker === "usr",
@@ -85,7 +83,7 @@ export const dme = setup({
       return { is };
     }),
     updateLatestMoves: assign(({ context, event }) => {
-      const v = (event as SaysMovesEvent).value;
+      const v = event.value;
       return {
         latest_moves: v.moves ?? [],
         latest_speaker: v.speaker,
@@ -128,7 +126,7 @@ export const dme = setup({
             onDone: {
               target: "SelectionDone",
               actions: assign(({ context, event }) => {
-                const r = event.output as Reply;
+                const r = event.output;
                 const move: Move = { type: "say", text: r.say, movieId: r.movieId, mode: r.mode };
                 return { is: { ...context.is, next_moves: [move] } };
               }),
@@ -160,7 +158,7 @@ export const dme = setup({
                 target: "Understand",
                 actions: assign(({ event }) => ({
                   latest_speaker: "usr" as const,
-                  latest_text: (event as SaysMovesEvent).value.text,
+                  latest_text: event.value.text,
                 })),
               },
               {
@@ -179,8 +177,8 @@ export const dme = setup({
               target: "Integrate",
               actions: [
                 assign(({ context, event }) => ({
-                  latest_moves: (event.output as Understood).moves,
-                  understood: event.output as Understood,
+                  latest_moves: event.output.moves,
+                  understood: event.output,
                   is: { ...context.is, next_moves: [] },
                 })),
                 { type: "isu", params: { name: "get_latest_move" } },
@@ -222,7 +220,7 @@ export const dme = setup({
                   target: "Check",
                   actions: assign(({ context, event }) => {
                     const vectors = new Map(context.vectors);
-                    for (const [t, v] of event.output as Map<string, Float32Array>) vectors.set(textKey(t), v);
+                    for (const [t, v] of event.output) vectors.set(textKey(t), v);
                     return { vectors };
                   }),
                 },

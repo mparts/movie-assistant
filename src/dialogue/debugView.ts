@@ -30,7 +30,7 @@ export const describePool = (pool: Pool): string =>
   ` (${pool.embeddedNow} embedded now) in ${(pool.ms / 1000).toFixed(1)}s`;
 
 /** "NLG: groq 429, then ollama (llama3.1:latest), 2.3 s" */
-export const describeAnswer = (a: LlmAnswer): string =>
+const describeAnswer = (a: LlmAnswer): string =>
   `${a.purpose ?? "LLM"}: ${[...a.failed, `${a.backend} (${a.model})`].join(", then ")}, ${(a.ms / 1000).toFixed(1)} s`;
 
 const brief = ({ type, ...rest }: Move) => (Object.keys(rest).length ? `${type} ${JSON.stringify(rest)}` : type);

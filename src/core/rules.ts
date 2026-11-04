@@ -8,7 +8,7 @@ import { notices } from "../config/prompts";
 import type { Pool } from "./pool";
 import { featuresPerson, rankPool, type QueryVectors } from "./ranking";
 import { InformationState as IS, Move, MoveOf, Movie, NlgMode, Qud, TotalInformationState } from "./types";
-import { last } from "./util";
+import { last, spokenText } from "./util";
 
 type Rule = (context: TotalInformationState) => ((x: void) => IS) | undefined;
 
@@ -40,7 +40,6 @@ function findMovie(is: IS, title?: string): Movie | undefined {
   });
 }
 
-const spokenText = (moves: Move[]) => moves.flatMap((m) => (m.type === "say" ? [m.text] : [])).join(" ");
 const recommendedIds = (moves: Move[]) =>
   moves.flatMap((m) => (m.type === "say" && m.movieId !== undefined ? [m.movieId] : []));
 const sameName = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();

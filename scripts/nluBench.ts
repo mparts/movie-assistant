@@ -11,7 +11,7 @@ import sampleProfile from "../profiles/solo.json";
 import type { InformationState, LlmClient, Move, Movie, Qud, Turn } from "../src/core/types";
 import { understand } from "../src/dialogue/nlu";
 
-export interface BenchCase {
+interface BenchCase {
   name: string;
   history?: Turn[];
   /** Movie the assistant last suggested (the focus for "that one"). */
@@ -320,7 +320,7 @@ export const cases: BenchCase[] = [
   },
 ];
 
-export function stateFor(c: BenchCase): InformationState {
+function stateFor(c: BenchCase): InformationState {
   const base = initialIS(parseIntake(sampleProfile));
   const justSuggested = !!c.suggested && c.justSuggested !== false;
   const sysLast = c.history?.[c.history.length - 1]?.speaker === "sys";
@@ -333,7 +333,7 @@ export function stateFor(c: BenchCase): InformationState {
   return c.state ? c.state(is) : is;
 }
 
-export interface CaseResult {
+interface CaseResult {
   name: string;
   /** "ok" | "wrong" (valid answer, failed check) | "invalid" (call failed or no usable JSON) */
   status: "ok" | "wrong" | "invalid";
@@ -342,7 +342,7 @@ export interface CaseResult {
   why?: string;
 }
 
-export async function runCase(llm: LlmClient, c: BenchCase): Promise<CaseResult> {
+async function runCase(llm: LlmClient, c: BenchCase): Promise<CaseResult> {
   const t0 = performance.now();
   try {
     const { moves } = await understand(llm, c.utterance, stateFor(c));
@@ -354,7 +354,7 @@ export async function runCase(llm: LlmClient, c: BenchCase): Promise<CaseResult>
   }
 }
 
-export interface Summary {
+interface Summary {
   total: number;
   ok: number;
   wrong: number;
@@ -370,7 +370,7 @@ export const percentile = (xs: number[], p: number): number => {
   return s[Math.min(s.length - 1, Math.ceil((p / 100) * s.length) - 1)];
 };
 
-export function summarize(results: CaseResult[]): Summary {
+function summarize(results: CaseResult[]): Summary {
   const ms = results.map((r) => r.ms);
   return {
     total: results.length,
@@ -383,13 +383,10 @@ export function summarize(results: CaseResult[]): Summary {
 }
 
 /** One untimed-in-stats warm-up call (loads the model), then every case once. */
-export async function runBench(
-  llm: LlmClient,
-  list: BenchCase[] = cases
-): Promise<{ warmupMs: number; results: CaseResult[]; summary: Summary }> {
+export async function runBench(llm: LlmClient): Promise<{ warmupMs: number; results: CaseResult[]; summary: Summary }> {
   const warm = await runCase(llm, { name: "warm-up", utterance: "hello there", check: () => null });
   const results: CaseResult[] = [];
-  for (const c of list) results.push(await runCase(llm, c));
+  for (const c of cases) results.push(await runCase(llm, c));
   return { warmupMs: warm.ms, results, summary: summarize(results) };
 }
 

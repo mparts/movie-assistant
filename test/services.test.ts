@@ -61,6 +61,4 @@ describe("llm fallback", () => {
     expect(order(["ollama", "local"])).toEqual(["ollama", "local", "groq"]);
     expect(order(["nobody"])).toEqual(["groq", "ollama", "local"]);
   });
-
-
 });

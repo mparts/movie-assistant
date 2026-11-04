@@ -14,8 +14,6 @@ describe("scripted turns never call the LLM", () => {
     expect((await respond(llm, freshIS())).say).toMatch(/^Hey Alex! .*just for you/);
     expect(llm.json).not.toHaveBeenCalled();
   });
-
-
 });
 
 describe("guards on the LLM", () => {

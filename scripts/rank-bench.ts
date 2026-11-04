@@ -6,16 +6,13 @@
  *   npm run rank-bench              summary
  *   npm run rank-bench -- --verbose  plus every top 10
  */
-import { authHeaders, embeddings as embCfg, services } from "../src/config/services";
-import { settings } from "../src/config/settings";
 import { parseIntake, type Intake } from "../src/core/intake";
 import type { Pool } from "../src/core/pool";
 import { rankPool, type QueryVectors, type Scored } from "../src/core/ranking";
 import { initialIS } from "../src/core/state";
 import type { InformationState, Movie } from "../src/core/types";
 import { createNodePool } from "../src/services/catalogue";
-import { createEmbedQuery } from "../src/services/embeddings";
-import { createTmdb } from "../src/services/tmdb";
+import { createClients } from "../src/services";
 import family from "../profiles/family.json";
 import solo from "../profiles/solo.json";
 import { loadEnv } from "./env";
@@ -25,10 +22,7 @@ const TOP = 10;
 const verbose = process.argv.includes("--verbose");
 
 const env = loadEnv();
-const tmdb = createTmdb({ baseUrl: services.tmdb.upstream, headers: authHeaders(services.tmdb, env), ...settings.search });
-const embedQuery = createEmbedQuery({
-  url: services[embCfg.service].upstream + embCfg.path, model: embCfg.model, queryPrefix: embCfg.queryPrefix, timeoutMs: embCfg.timeoutMs,
-});
+const { tmdb, embedQuery } = createClients("upstream", env);
 const { pool: loadPool, catalogue } = createNodePool(tmdb, console.log);
 
 /* ---- labels ---- */

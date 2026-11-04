@@ -48,7 +48,7 @@ export async function understand(llm: LlmClient, text: string, is: InformationSt
         content: JSON.stringify({
           conversation: is.history.slice(-settings.dialogue.historyForNlu),
           whatWeKnow: stateSummary(is),
-          lastSuggestedMovie: lastSuggested(is),
+          lastSuggestedMovie: suggested,
           utterance: text,
         }),
       },

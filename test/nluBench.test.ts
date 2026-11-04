@@ -43,7 +43,6 @@ describe("NLU bench", () => {
     expect(summary).toMatchObject({ total: cases.length, ok: cases.length, wrong: 0, invalid: 0 });
   });
 
-
   test("a failing call counts as invalid, not wrong, and does not stop the run; the accept shortcut needs no model", async () => {
     const down: LlmClient = { json: async () => { throw new Error("connection refused"); } };
     const { results, summary } = await runBench(down);
@@ -51,9 +50,6 @@ describe("NLU bench", () => {
     expect(results.filter((r) => r.status === "ok").map((r) => r.name)).toEqual(["real-accept-bare-yes", "real-confirm-this-one"]);
     expect(results[0].why).toContain("connection refused");
   });
-
-
-
 
   test("percentile uses nearest rank; the table has one row per model", () => {
     expect(percentile([10, 20, 30, 40, 50, 60, 70, 80, 90, 100], 50)).toBe(50);

@@ -1,4 +1,9 @@
+import type { Move } from "./types";
+
 export const last = <T>(xs: T[]): T | undefined => xs[xs.length - 1];
+
+/** What Elisa says: the text of her `say` moves. */
+export const spokenText = (moves: Move[]) => moves.flatMap((m) => (m.type === "say" ? [m.text] : [])).join(" ");
 
 const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 /** Does `text` name this movie title? Whole words, any case: "Up" is not in "supper". */

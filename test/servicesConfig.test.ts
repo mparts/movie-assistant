@@ -9,14 +9,10 @@ describe("service config", () => {
     for (const a of prefixes) for (const b of prefixes) if (a !== b) expect(a.startsWith(b)).toBe(false);
   });
 
-
   test("NLU tries the university model, then Groq, and the local one last; NLG starts with Groq", () => {
     const on = llmBackends.filter((b) => b.enabled !== false);
     const names = (prefer?: string | string[]) => orderByPreference(on, prefer).map((b) => b.name);
     expect(names(settings.llm.understand.prefer)).toEqual(["ollama", "groq", "local"]);
     expect(names(settings.llm.respond.prefer)).toEqual(["groq", "ollama", "local"]);
   });
-
-
-
 });

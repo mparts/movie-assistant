@@ -19,7 +19,7 @@ const after = (title: string | null, elisa: string): IS => {
   return is;
 };
 
-describe("A: a bare yes after a suggestion is an accept, without the LLM", () => {
+describe("a bare yes after a suggestion is an accept, without the LLM", () => {
   test("agreement phrases are recognised; anything more is not", () => {
     for (const t of ["yes", "Yeah why not.. let's go with that!!", "yes it works!!", "yes this one", "sounds good", "Sure, perfect", "ok thanks"])
       expect(isAffirmation(t), t).toBe(true);
@@ -32,8 +32,6 @@ describe("A: a bare yes after a suggestion is an accept, without the LLM", () =>
     expect(await understand(llm, "yes this one", after("About Time", "How about About Time?"))).toEqual({ moves: [{ type: "accept" }], dropped: [] });
     expect(llm.json).not.toHaveBeenCalled();
   });
-
-
 
   test("the accepted movie is remembered until something substantive is said, and survives silence and small talk", () => {
     const base = after("About Time", "How about About Time?");
@@ -59,8 +57,6 @@ describe("A: a bare yes after a suggestion is an accept, without the LLM", () =>
     expect(sent.acceptedMovie).toBe("About Time");
     expect(sent.candidates).toBeUndefined();
   });
-
-
 });
 
 describe("wrap-up with a duplicate title", () => {
@@ -75,7 +71,7 @@ describe("wrap-up with a duplicate title", () => {
   });
 });
 
-describe("B: moves the user's words do not support are dropped", () => {
+describe("moves the user's words do not support are dropped", () => {
   const elisa = "Back to the Future has that fun, goofy vibe with a sweet hint of romance, perfect for a light date night.";
   test("a wish made of the assistant's words is dropped; the user's own (or a bare yes to it) is kept", () => {
     const copied: Move[] = [{ type: "wish", text: "A goofy movie for a light date night." }];
@@ -90,8 +86,6 @@ describe("B: moves the user's words do not support are dropped", () => {
     expect(ground([{ type: "person", name: "Michael J. Fox" }], "sounds fun", elisa, null)).toEqual([]);
     expect(ground([{ type: "person", name: "Christopher Nolan" }], "a nolan movie", undefined, null)).toHaveLength(1);
   });
-
-
 });
 
 describe("a negation in the wish", () => {

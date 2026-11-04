@@ -39,27 +39,20 @@ function blocked(): string | null {
 const form = createIntakeForm($("form"), { blocked, onDone: (intake) => dmActor.send({ type: "INTAKE_DONE", intake }) });
 form.open("name");
 
-$("change").addEventListener("click", () => {
+/** Back to the Tonight screen with the answers kept: from the chat, or when there are too few movies. */
+const changeSettings = () => {
   dmActor.send({ type: "CHANGE_SETTINGS" });
   form.open("tonight");
-});
-
-// Too few movies (or none, or an error): back to the Tonight screen with the answers kept, or go anyway.
-$("pool-change").addEventListener("click", () => {
-  dmActor.send({ type: "CHANGE_SETTINGS" });
-  form.open("tonight");
-});
+};
+$("change").addEventListener("click", changeSettings);
+$("pool-change").addEventListener("click", changeSettings);
 $("pool-go").addEventListener("click", () => dmActor.send({ type: "GO_ANYWAY" }));
 
-let inChat = false;
 onChange(() => {
   const snap = dmActor.getSnapshot();
   const chatting = snap.matches("Main");
   const checking = snap.matches("PoolCheck");
-  if (chatting !== inChat) {
-    inChat = chatting;
-    $("chat").hidden = !chatting;
-  }
+  $("chat").hidden = !chatting;
   $("form").hidden = chatting || checking;
   $("pool-check").hidden = !checking;
   if (checking) {
