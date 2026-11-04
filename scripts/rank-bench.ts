@@ -59,9 +59,9 @@ function score(w: Wish, pool: Pool, ranked: Scored[]): Result {
   };
 }
 
-/** The state the NLU would leave: the wish, named genres, avoid texts. */
+/** The state the NLU would leave: the wish and the avoid texts. */
 function stateFor(intake: Intake, w: Wish): InformationState {
-  return { ...initialIS(intake), wish: w.wish, genres: w.genres, avoid: w.avoid ?? [] };
+  return { ...initialIS(intake), wish: w.wish, avoid: w.avoid ?? [] };
 }
 
 const vectorCache = new Map<string, Float32Array>();

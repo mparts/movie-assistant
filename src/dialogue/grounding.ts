@@ -1,20 +1,14 @@
 /**
  * Checks on what the LLM extracted, using only the user's own words. Small models sometimes copy the assistant's
- * words into the user's moves ("yes this one" → a wish the assistant just said) or attach a "no" to the wrong thing
- * ("no I don't like this, maybe something more funny" → no Comedy). A move the user's words do not support is
- * dropped, never changed.
+ * words into the user's moves ("yes this one" → a wish the assistant just said). A move the user's words do not
+ * support is dropped, never changed.
  */
 import { settings } from "../config/settings";
-import { resolveGenres, wordsFor } from "../core/lexicon";
 import type { Move } from "../core/types";
 
 /** Lowercase words: apostrophes removed ("don't" → "dont"), everything else that is not a letter or digit is a gap. */
 export const words = (s: string): string[] =>
   s.toLowerCase().replace(/['’]/g, "").replace(/[^a-z0-9]+/g, " ").trim().split(" ").filter(Boolean);
-
-/** Like `words`, but sentence and clause breaks (. , ; ! ? : and dashes) stay as "|" so a "no" cannot reach across one. */
-const clauseWords = (s: string): string[] =>
-  s.toLowerCase().replace(/['’]/g, "").replace(/[.,;:!?…—–-]+/g, " | ").replace(/[^a-z0-9|]+/g, " ").trim().split(" ").filter(Boolean);
 
 /** Only agreement, nothing else: "yes", "sounds good", "yeah why not, let's go with that". */
 export function isAffirmation(text: string): boolean {
@@ -47,43 +41,6 @@ function titleSaid(title: string, utterance: string): boolean {
   const w = content(title);
   if (!w.length) return true;
   return w.filter((x) => mentions(utterance, x)).length >= Math.ceil(w.length / 2);
-}
-
-const CUES = new Set(["no", "not", "dont", "doesnt", "cant", "cannot", "wont", "never", "without", "hate", "hates", "avoid", "except", "skip", "nothing", "none", "nor"]);
-/** Between a "no" and what it applies to, these mean the person has moved on to what they DO want. */
-const BLOCKERS = new Set(["more", "maybe", "something", "rather", "instead", "also", "any", "but"]);
-const REACH = 6; // a cue applies to a word at most this many words after it, within one clause
-
-/** Positions (word index) in `said` where any of these terms occurs, plural forms included. */
-function positions(said: string[], terms: string[]): number[] {
-  const joined = ` ${said.join(" ")} `;
-  const out: number[] = [];
-  for (const t of terms) {
-    for (const form of [t, `${t}s`, `${t}es`]) {
-      for (let at = joined.indexOf(` ${form} `); at >= 0; at = joined.indexOf(` ${form} `, at + 1)) {
-        out.push(joined.slice(0, at + 1).trim().split(" ").filter(Boolean).length);
-      }
-    }
-  }
-  return out;
-}
-
-/** Does a "no" sit right before position p, with nothing in between that turns the sentence positive? */
-function negatedAt(said: string[], p: number): boolean {
-  for (let q = p - 1; q >= 0 && p - q <= REACH; q--) {
-    const w = said[q];
-    if (w === "|") return false; // a new sentence or clause
-    if (CUES.has(w) || (w === "but" && ["anything", "everything", "all"].includes(said[q - 1]))) return true;
-    if (BLOCKERS.has(w)) return false;
-  }
-  return false;
-}
-
-/** A negated genre needs the word (or an alias) in the user's utterance, and a "no" right before it. */
-function negationSupported(m: Extract<Move, { type: "prefer" }>, utterance: string): boolean {
-  const said = clauseWords(utterance);
-  const terms = new Set([words(m.genre).join(" "), ...wordsFor(resolveGenres(m.genre))]);
-  return positions(said, [...terms]).some((p) => negatedAt(said, p));
 }
 
 /**
@@ -169,8 +126,6 @@ export function ground(moves: Move[], utterance: string, lastSystem: string | un
       }
       case "avoid":
         return !words(m.text).every((w) => HEDGE.has(w)) && !copied(content(m.text), utterance, lastSystem);
-      case "prefer":
-        return m.negated ? negationSupported(m, utterance) : true;
       case "accept":
         return suggested !== null;
       default:

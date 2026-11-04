@@ -112,8 +112,8 @@ export const settings = {
    * so the weights compare like with like. Chosen in the spike (todo.md, step 5), checked by `npm run rank-bench`.
    */
   ranking: {
-    /** Similarity to the wish (or to a liked movie, whichever is higher), genres they named, number of votes. */
-    weights: { semantic: 0.8, genres: 0.1, popularity: 0.1 },
+    /** Similarity to the wish, and number of votes. */
+    weights: { semantic: 0.8, popularity: 0.1 },
     /**
      * Penalties hit only the movies MOST similar to something unwanted: `weight` at the top, fading to 0 at
      * percentile `from`. An avoid text ("princesses") hits the top 5%; a turned-down movie its closest 10%.

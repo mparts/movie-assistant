@@ -16,14 +16,11 @@ const heard = (moves: Move[], setup: (is: IS) => void = () => {}): IS => {
 const run = (name: string, is: IS): IS | undefined => rules[name]({ is })?.();
 
 describe("rules: taste", () => {
-  test("the latest wish replaces the old one; a negated genre moves from wanted to avoided", () => {
-    const is = heard([{ type: "wish", text: "A funny heist." }, { type: "prefer", genre: "comedies", negated: true }], (s) => {
+  test("the latest wish replaces the old one", () => {
+    const is = heard([{ type: "wish", text: "A funny heist." }], (s) => {
       s.wish = "A heist.";
-      s.genres = ["Comedy", "Crime"];
     });
-    const next = run("integrate_prefer", run("integrate_wish", is)!)!;
-    expect(next.wish).toBe("A funny heist.");
-    expect([next.genres, next.avoidGenres]).toEqual([["Crime"], ["Comedy"]]);
+    expect(run("integrate_wish", is)!.wish).toBe("A funny heist.");
   });
 });
 

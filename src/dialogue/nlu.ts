@@ -16,10 +16,6 @@ function clean(m: any): Move | null {
       const text = str(m.text);
       return text ? { type: m.type, text } : null;
     }
-    case "prefer": {
-      const genre = str(m.genre);
-      return genre ? { type: "prefer", genre, negated: m.negated === true } : null;
-    }
     case "person": {
       const name = str(m.name);
       return name ? { type: "person", name, negated: m.negated === true } : null;

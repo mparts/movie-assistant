@@ -42,7 +42,7 @@ describe("A: a bare yes after a suggestion is an accept, without the LLM", () =>
     expect(accepted.accepted).toBe(1);
     expect(hear(accepted, []).accepted).toBe(1); // "thanks" gives no moves
     expect(hear(accepted, [{ type: "noinput" }]).accepted).toBe(1);
-    expect(hear(accepted, [{ type: "prefer", genre: "Horror" }]).accepted).toBeUndefined(); // new request: back to normal
+    expect(hear(accepted, [{ type: "wish", text: "A creepy ghost story." }]).accepted).toBeUndefined(); // new request: back to normal
     expect(rules.get_latest_move({ is: accepted, latest_moves: [{ type: "say", text: "Enjoy!" }], latest_speaker: "sys" })!().accepted).toBe(1);
   });
 
@@ -89,32 +89,6 @@ describe("B: moves the user's words do not support are dropped", () => {
   test("a person needs their name in the user's words", () => {
     expect(ground([{ type: "person", name: "Michael J. Fox" }], "sounds fun", jake, null)).toEqual([]);
     expect(ground([{ type: "person", name: "Christopher Nolan" }], "a nolan movie", undefined, null)).toHaveLength(1);
-  });
-
-
-});
-
-describe("C: a negated genre needs a 'no' right before it", () => {
-  const neg = (genre: string): Move[] => [{ type: "prefer", genre, negated: true }];
-  test("the chat.log case: 'no' belongs to 'this', not to funny", () => {
-    expect(ground(neg("Comedy"), "hhmm... no I do not like this.. maybe something more funny", undefined, null)).toEqual([]);
-  });
-
-  test("real negations are kept", () => {
-    for (const [genre, said] of [
-      ["Horror", "no horror please"],
-      ["Horror", "anything but horror, I can't sleep after those"],
-      ["Comedy", "I don't like comedies"],
-      ["Horror", "I can't stand scary movies"],
-      ["Romance", "not really in the mood for romance"],
-    ] as const)
-      expect(ground(neg(genre), said, undefined, null), said).toHaveLength(1);
-  });
-
-
-  test("a 'no' does not reach into the next sentence or clause", () => {
-    expect(ground(neg("Comedy"), "no, I do not like this one. funny please", undefined, null)).toEqual([]);
-    expect(ground(neg("Comedy"), "I do not like this, something funny then", undefined, null)).toEqual([]);
   });
 
 

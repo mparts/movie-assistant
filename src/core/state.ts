@@ -13,8 +13,6 @@ export const initialIS = (intake: Intake): IS => ({
   history: [],
   readiness: { meaningfulTurns: 0, evidence: [] },
   wish: "",
-  genres: [],
-  avoidGenres: [],
   avoid: [],
   people: [],
   candidates: [],
@@ -24,8 +22,8 @@ export const initialIS = (intake: Intake): IS => ({
   qud: "none",
 });
 
-/** Taste = a wish, a wanted genre, or a wanted person. Filters and dislikes alone are not taste. */
-export const hasTaste = (is: IS) => !!is.wish || is.genres.length > 0 || is.people.some((p) => !p.negated);
+/** Taste = a wish or a wanted person. Filters and dislikes alone are not taste. */
+export const hasTaste = (is: IS) => !!is.wish || is.people.some((p) => !p.negated);
 
 /** Phase 1 as TMDB filters: the pool is every movie that passes them. The chat can only narrow this, locally. */
 export function poolCriteria({ profile, tonight }: Intake): SearchCriteria {
@@ -54,11 +52,9 @@ export function stateSummary(is: IS): Record<string, unknown> {
     },
   };
   if (is.wish) o.wish = is.wish;
-  if (is.genres.length) o.wantedGenres = is.genres;
   const wanted = is.people.filter((p) => !p.negated).map((p) => p.name);
   const unwanted = is.people.filter((p) => p.negated).map((p) => p.name);
   if (wanted.length) o.wantedPeople = wanted;
-  if (is.avoidGenres.length) o.avoidGenres = is.avoidGenres;
   if (is.avoid.length) o.avoid = is.avoid;
   if (unwanted.length) o.avoidPeople = unwanted;
   return o;
@@ -70,7 +66,6 @@ export const lastSuggested = (is: IS): string | null => last(is.recommended)?.ti
 export function tasteProfile(is: IS): string | null {
   const parts: string[] = [];
   if (is.wish) parts.push(`They want: ${is.wish}`);
-  if (is.genres.length) parts.push(`Genres: ${is.genres.join(", ")}.`);
   const wanted = is.people.filter((p) => !p.negated).map((p) => p.name);
   if (wanted.length) parts.push(`With: ${wanted.join(", ")}.`);
   return parts.join(" ") || null;

@@ -21,7 +21,7 @@ describe("scripted turns never call the LLM", () => {
 describe("guards on the LLM", () => {
   const early = () => {
     const is = freshIS();
-    is.genres = ["Adventure"];
+    is.wish = "An exciting adventure.";
     is.candidates = [movie];
     is.history = [{ speaker: "sys", text: utterances.opening(is.intake) }, { speaker: "usr", text: "adventure" }];
     return is;
@@ -44,7 +44,7 @@ describe("guards on the LLM", () => {
     // Found in a spoken browser run: the suggestion was never recorded, so "yeah this works" could not accept it.
     const is = early();
     is.wish = "An exciting adventure.";
-    is.readiness = { meaningfulTurns: 2, evidence: ["wish:an exciting adventure.", "prefer:adventure"] };
+    is.readiness = { meaningfulTurns: 2, evidence: ["wish:an exciting adventure.", "avoid:horror"] };
     const llm = fakeLlm({ say: "How about Example tonight?", recommend: null });
     expect(await respond(llm, is)).toEqual({ say: "How about Example tonight?", movieId: 42, mode: "recommend" });
   });

@@ -38,16 +38,14 @@ describe("rankPool", () => {
     expect(ids(p, seen, { wish })[0]).toBe(2);
   });
 
-  test("people: a wanted one comes first, an avoided one is gone; genres they avoid are gone", () => {
+  test("people: a wanted one comes first, an avoided one is gone", () => {
     const q = pool([
       [movie(1, { cast: ["Keanu Reeves"] }), [0, 0, 1]],
       [movie(2, { directors: ["Christopher Nolan"], genres: ["Drama"] }), [1, 0, 0]],
       [movie(3, { cast: ["Adam Sandler"] }), [0.9, 0.1, 0]],
-      [movie(4, { genres: ["Horror"] }), [1, 0, 0]],
     ]);
     const is = freshIS();
     is.people = [{ name: "keanu reeves", negated: false }, { name: "Sandler", negated: true }];
-    is.avoidGenres = ["Horror"];
     expect(ids(q, is, { wish })).toEqual([1, 2]);
   });
 });

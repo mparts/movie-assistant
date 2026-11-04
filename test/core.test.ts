@@ -39,7 +39,7 @@ describe("readiness", () => {
     expect(recommendationReadiness(s).ready).toBe(true);
 
     const t = freshIS();
-    t.genres = ["Comedy"];
+    t.wish = "A comedy.";
     t.history = [{ speaker: "usr", text: "just pick one" }];
     expect(recommendationReadiness(t).ready).toBe(true);
   });

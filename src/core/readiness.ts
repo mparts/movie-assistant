@@ -8,7 +8,6 @@ export function evidenceFromMoves(moves: Move[]): string[] {
     switch (m.type) {
       case "wish": return [`wish:${m.text.trim().toLowerCase()}`];
       case "avoid": return [`avoid:${m.text.trim().toLowerCase()}`];
-      case "prefer": return [`prefer:${m.negated ? "not:" : ""}${m.genre.toLowerCase()}`];
       case "person": return [`person:${m.negated ? "not:" : ""}${m.name.toLowerCase()}`];
       default: return [];
     }

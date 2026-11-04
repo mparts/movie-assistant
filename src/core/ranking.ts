@@ -1,7 +1,7 @@
 /**
  * Ranking tonight's pool. Pure and synchronous: the typed chat, the browser and `npm run rank-bench` all call this.
  *
- *   score = 0.8·semantic + 0.1·genres + 0.1·popularity − avoid − reject + person      (settings.ranking)
+ *   score = 0.8·semantic + 0.1·popularity − avoid − reject + person      (settings.ranking)
  *
  * Every term but `person` is a percentile within the movies still eligible, so the weights compare like with like.
  * semantic: similarity to the wish. avoid / reject: a penalty only for the movies most similar to an avoid text /
@@ -24,7 +24,6 @@ export interface Scored {
   score: number;
   /** The terms, for "why this movie?" and the bench. */
   semantic: number;
-  genres: number;
   popularity: number;
   avoid: number;
   reject: number;
@@ -55,7 +54,6 @@ export function eligible(is: IS, movies: Movie[]): Movie[] {
   return movies.filter(
     (m) =>
       !out.has(m.id) &&
-      !m.genres.some((g) => is.avoidGenres.includes(g)) &&
       !unwanted.some((p) => featuresPerson(m, p.name))
   );
 }
@@ -123,18 +121,15 @@ export function rankPool(is: IS, pool: Pool, q: QueryVectors): Scored[] {
     return v ? [pctOf(v)] : [];
   });
   const popularity = percentiles(movies.map((m) => m.votes));
-  const wantedGenres = new Set(is.genres);
   const wantedPeople = is.people.filter((p) => !p.negated);
 
   const scored = movies.map((movie, i): Scored => {
     const semantic = semanticSources.length ? Math.max(...semanticSources.map((p) => p[i])) : 0;
-    const genres = wantedGenres.size ? movie.genres.filter((g) => wantedGenres.has(g)).length / wantedGenres.size : 0;
     const avoid = Math.max(0, ...avoids.map((p) => R.avoid.weight * ramp(p[i], R.avoid.from)));
     const reject = Math.max(0, ...turnedDown.map((p) => R.reject.weight * ramp(p[i], R.reject.from)));
     const person = wantedPeople.some((p) => featuresPerson(movie, p.name)) ? R.person : 0;
-    const score =
-      R.weights.semantic * semantic + R.weights.genres * genres + R.weights.popularity * popularity[i] - avoid - reject + person;
-    return { movie, score, semantic, genres, popularity: popularity[i], avoid, reject, person };
+    const score = R.weights.semantic * semantic + R.weights.popularity * popularity[i] - avoid - reject + person;
+    return { movie, score, semantic, popularity: popularity[i], avoid, reject, person };
   });
   // Ties (e.g. no taste yet) keep the pool's order.
   return scored.sort((a, b) => b.score - a.score);

@@ -46,10 +46,8 @@ export type Turn = { speaker: Speaker; text: string };
 export type Move =
   /** The WHOLE updated wish, as a short description of the movie they want; never contains negations. */
   | { type: "wish"; text: string }
-  /** Something they don't want that is not a genre ("princesses", "anything too sad"). */
+  /** Something they don't want ("horror", "princesses", "anything too sad"). */
   | { type: "avoid"; text: string }
-  /** A named genre: wanted (soft), or with `negated` avoided (hard). */
-  | { type: "prefer"; genre: string; negated?: boolean }
   /** An actor or director: wanted (their movies first), or with `negated` avoided (excluded). */
   | { type: "person"; name: string; negated?: boolean }
   | { type: "seen"; title?: string } // no title = the movie in focus
@@ -89,11 +87,7 @@ export interface InformationState {
 
   /** What they want, as a short movie description (rewritten by the NLU whenever taste changes). Ranked semantically. */
   wish: string;
-  /** Genres they named: a soft want. */
-  genres: string[];
-  /** Genres they don't want: excluded (tonight's avoided genres are already out of the pool). */
-  avoidGenres: string[];
-  /** Other things they don't want: a narrow penalty on the movies most similar to them. */
+  /** Things they don't want: a narrow penalty on the movies most similar to them. */
   avoid: string[];
   /** Actors and directors: wanted ones rank first, avoided ones are excluded. */
   people: { name: string; negated: boolean }[];

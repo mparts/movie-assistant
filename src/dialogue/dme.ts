@@ -41,7 +41,6 @@ function ruleChain(names: string[]) {
 const INTEGRATE_RULES = [
   "integrate_wish",
   "integrate_avoid",
-  "integrate_prefer",
   "integrate_person",
   "integrate_seen_reject",
   "integrate_recommend",
@@ -223,7 +222,7 @@ export const dme = setup({
                     return { vectors };
                   }),
                 },
-                // Without the vectors the ranking still works (genres, people, popularity); try again next turn.
+                // Without the vectors the ranking still works (people, popularity); try again next turn.
                 onError: {
                   target: "Rank",
                   actions: ({ event }) => console.warn("[embeddings unavailable; ranking without the wish this turn]", event.error),

@@ -5,12 +5,11 @@
  */
 import { settings } from "../config/settings";
 import { notices } from "../config/prompts";
-import { resolveGenres } from "./lexicon";
 import type { Pool } from "./pool";
 import { featuresPerson, rankPool, type QueryVectors } from "./ranking";
 import { evidenceFromMoves } from "./readiness";
 import { InformationState as IS, Move, MoveOf, Movie, NlgMode, Qud, TotalInformationState } from "./types";
-import { addUnique, last, without } from "./util";
+import { last } from "./util";
 
 type Rule = (context: TotalInformationState) => ((x: void) => IS) | undefined;
 
@@ -112,19 +111,6 @@ export const rules: Record<string, Rule> = {
   integrate_avoid: ({ is }) => {
     const texts = usr(is, "avoid").map((m) => m.text.trim()).filter((t) => t && !is.avoid.includes(t));
     return texts.length ? () => ({ ...is, avoid: [...is.avoid, ...texts] }) : undefined;
-  },
-
-  /** A named genre: a soft want, or (negated) a hard avoid. Saying one undoes the other. */
-  integrate_prefer: ({ is }) => {
-    const ms = usr(is, "prefer").filter((m) => resolveGenres(m.genre).length);
-    if (!ms.length) return;
-    return () =>
-      ms.reduce((acc, m) => {
-        const names = resolveGenres(m.genre);
-        return m.negated
-          ? { ...acc, genres: without(acc.genres, names), avoidGenres: addUnique(acc.avoidGenres, names) }
-          : { ...acc, genres: addUnique(acc.genres, names), avoidGenres: without(acc.avoidGenres, names) };
-      }, is);
   },
 
   /** An actor or director, wanted or not; the latest word on a name wins. */
