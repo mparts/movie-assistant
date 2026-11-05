@@ -11,7 +11,7 @@
   --text: #e8e8e8;
   --text-dim: #555;
   --text-muted: #888;
-  --accent: #ffb800;
+  --accent: #ff2bd6;
   --accent-green: #00ff87;
   --accent-blue: #3c8fff;
   --accent-red: #ff3c3c;
@@ -91,7 +91,7 @@ button.primary {
 .chips { display: flex; flex-wrap: wrap; gap: 8px; }
 .chip { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; font-size: 13px; }
 .chip img { width: 20px; height: 20px; border-radius: 4px; }
-.chip.on { border-color: var(--accent); color: var(--accent); background: #ffb80014; }
+.chip.on { border-color: var(--accent); color: var(--accent); background: #ff2bd614; }
 
 /* chat */
 .line { display: flex; gap: 12px; align-items: flex-start; }

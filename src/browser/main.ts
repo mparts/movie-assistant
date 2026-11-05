@@ -5,8 +5,10 @@ import { certificationFor } from "../core/intake";
 import { dmActor, onChange, speechView } from "./dm";
 import { createIntakeForm } from "./intakeForm";
 
+const pick = <T,>(xs: readonly T[]): T => xs[Math.floor(Math.random() * xs.length)];
+
 document.querySelector("#app")!.innerHTML = `
-  <header><span class="title">${T.title}</span><span class="tagline">${T.tagline}</span></header>
+  <header><span class="title">${T.title}</span><span class="tagline">${pick(T.taglines)}</span></header>
   <main>
     <section id="form" class="panel"></section>
     <section id="pool-check" class="panel" hidden>

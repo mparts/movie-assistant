@@ -115,10 +115,24 @@ export const respondModes = {
 /** Everything the settings form (Phase 1, browser) says. */
 export const formText = {
   title: "ELISA",
-  tagline: "your movie night sidekick",
+  taglines: [
+    "your popcorn-powered movie wingman",
+    "your couch-bound cinema consultant",
+    "your snack-fuelled film fixer",
+    "your reluctant-but-helpful movie minion",
+    "your pocket-sized picture picker",
+    "your sofa's favourite film nerd",
+    "your ticket-free cinema concierge",
+    "your gloriously opinionated movie buddy",
+    "your after-midnight plot-twist hunter",
+    "your crisp-crumbed credits consultant",
+    "your two-hour-runtime negotiator",
+    "your binge-watching enabler",
+    "your rewind-button enthusiast",
+  ],
   name: {
     heading: "First things first",
-    question: "What should Elisa call you?",
+    question: "How should Elisa call you?",
     placeholder: "Your name",
     next: "Next",
     guest: "Just browsing (guest)",
