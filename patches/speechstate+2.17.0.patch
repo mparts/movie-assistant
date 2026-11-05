@@ -1,0 +1,15 @@
+diff --git a/node_modules/speechstate/dist/asr.js b/node_modules/speechstate/dist/asr.js
+index 0338bb2..2e2dc8b 100644
+--- a/node_modules/speechstate/dist/asr.js
++++ b/node_modules/speechstate/dist/asr.js
+@@ -110,6 +110,10 @@ exports.asrMachine = (0, xstate_1.setup)({
+             recognition.onabort = function () {
+                 sendBack({ type: "LISTEN_COMPLETE" });
+             };
++            // Azure can fail the abort ("Another turn started before current completed") and then sends no "end"
++            recognition.onerror = function () {
++                sendBack({ type: "LISTEN_COMPLETE" });
++            };
+             console.debug("[ASR] READY", recognition);
+             sendBack({ type: "READY", value: recognition });
+             receive((event) => {
