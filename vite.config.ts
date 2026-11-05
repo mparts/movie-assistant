@@ -22,7 +22,7 @@ const jsonBody = (req: import("node:http").IncomingMessage) =>
   });
 
 /**
- * Tonight's pool for the browser, from the same Node code as the typed chat (src/services/catalogue.ts):
+ * Tonight's pool for the browser, loaded by the same Node code as the typed chat (`createNodePool`):
  *   POST /pool          an intake  → tonight's pool (local catalogue or TMDB, embedded on the spot if new)
  * Answer: the movies as JSON (x-json-bytes long), zero-padded to a multiple of 4 bytes, then one Float32 row
  * (x-dims long) per movie, in the same order.
@@ -63,7 +63,7 @@ function poolEndpoint(env: Record<string, string>): Plugin {
 }
 
 /**
- * Dev-server proxy, generated from src/config/services.ts: the browser calls `proxy` prefixes,
+ * Dev-server proxy, generated from `services`: the browser calls `proxy` prefixes,
  * this forwards them to each `upstream` and adds the secret, so keys never reach the browser.
  */
 export default defineConfig(({ mode }) => {
