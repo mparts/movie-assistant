@@ -85,7 +85,7 @@ Then every turn:
 3. **The DME hears it.** The text arrives as `SAYS` from `usr`, and the Update state starts with `clear_notices`.
 4. **Understand.** `understand` (`dialogue/nlu.ts`) makes one LLM call that turns the utterance into moves, unless it is a bare "yes" to a suggestion. The moves then pass `clean`, `repairMoves` and `ground`.
 5. **Integrate.** `get_latest_move` records the turn, then the `integrate_*` rules (`core/rules.ts`) write the moves into the information state.
-6. **Retrieve.** Any new wish or avoid text is embedded through Ollama (`embedQuery`). `applyRanking` scores the whole pool (`rankPool` in `core/ranking.ts`) and keeps the best 10 as candidates.
+6. **Retrieve.** Any new wish or avoid text is embedded through Ollama (`embedQuery`). `applyRanking` scores the whole pool (`rankPool` in `core/ranking.ts`) and keeps the best `settings.dialogue.candidatesShown` movies as candidates.
 7. **Select.** `replyMode` (`dialogue/respond.ts`) picks how Elisa should reply, `respond` makes one LLM call for the reply, and the code checks it. Back to step 1.
 
 The conversation ends when Elisa wraps up after you accept a movie. She then stops listening. The typed chat (`scripts/chat.ts`) runs the same DME, with the terminal in place of speechstate.
@@ -105,6 +105,7 @@ Choices around it:
 - The Azure key is the one secret the browser holds, because speechstate fetches its token from Azure directly. Every other key stays on the dev server.
 - speechstate cannot start again after `STOP`. Going back to the settings therefore leaves speech running, and the form waits until it is idle before a new conversation starts.
 - Silence is a move of its own (`noinput`), answered with a fixed line and no LLM.
+- The local patch `patches/speechstate+2.17.0.patch` is applied by the `postinstall` script. It makes `asr.js` send `LISTEN_COMPLETE` on `onerror`, so a failed Azure abort no longer freezes the dialogue. See [docs/speechstate-asr-hang.md](docs/speechstate-asr-hang.md).
 - Phase 1 is a form rather than speech. Hard facts like ages and streaming services are faster and safer to click than to say.
 
 ## SISU and the information state
@@ -138,7 +139,7 @@ Two LLM calls per user turn, and neither writes the state.
 
 ## Embeddings and ranking
 
-This is the retrieval side, a small RAG: the wish is embedded, the pool is ranked against it, and the best 10 movies, with their facts, go into the NLG prompt as the only movies Elisa may suggest.
+This is the retrieval side, a small RAG: the wish is embedded, the pool is ranked against it, and the best `settings.dialogue.candidatesShown` movies, with their facts, go into the NLG prompt as the only movies Elisa may suggest.
 
 - **The model** is `qwen3-embedding:4b` on local Ollama (2,560 dimensions), the strongest of the models tried. A movie is embedded as `movieText`: title, year, genres, overview and up to 15 TMDB keywords. A query gets an instruction prefix ("Given a description of a movie someone wants to watch, retrieve movies that match it") and a document does not, as the model expects.
 - **The vectors** are made ahead of time by `embed-catalogue` and stored as one flat Float32 file with a JSON index. Each vector keeps a hash of its text, so a changed text is re-embedded on the next run. During the chat only the wish and avoid texts are embedded, about 40 ms each, and cached by text.
@@ -157,6 +158,14 @@ score = 0.8·semantic + 0.1·popularity − avoid − reject + person
 - `person` adds 1 when a wanted actor or director is in the credits, which puts their movies above everything else.
 
 Percentiles, because raw cosine similarities sit in a narrow band that moves with every query, so fixed weights on them would mean something different each turn. On percentiles every term runs from 0 to 1, and the weights compare like with like. The penalties only reach the top few percent, so "no princesses" sinks princess movies without pulling down every fairy tale. Movies already suggested, seen or turned down, and movies with an avoided person, are not eligible at all. `npm run rank-bench` is the regression set: hand-labelled wishes on two real pools, scored by recall@10 and forbidden titles in the top 10.
+
+## Limitations
+
+- Barge-in is off (`settings.speech.bargeIn: false`), so you cannot interrupt Elisa's longer replies.
+- Age limits use US certifications for everyone (`settings.intake.certification`), so movies without a US rating drop out of age-limited pools.
+- The chat, the prompts and the speech are English only.
+
+Further limitations are tracked on the [GitHub issues tab](https://github.com/mparts/movie-assistant/issues).
 
 ## Credits
 
