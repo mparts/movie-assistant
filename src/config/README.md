@@ -4,7 +4,7 @@ Everything you can change without changing logic. These modules import nothing f
 
 - `prompts.ts` holds every word Elisa or the page shows.
   - `understandCore` and `understandByQud` make the NLU prompt. The second part depends on what Elisa's last turn left open (`qud`).
-  - `respondSystem` and one of `respondModes` make the NLG prompt.
+  - `respondSystem` holds the NLG prompt for each mode (explore, recommend, discuss, wrapup), built from shared parts. Each mode gets only the parts it uses.
   - `utterances` are the lines spoken without an LLM: the opening, the reply to silence, and the fallbacks for when the LLM keeps breaking the rules.
   - `notices` are things that happened behind the scenes, handed to the NLG to mention.
   - `formText` and `movieCardText` are the page's labels.

@@ -1,4 +1,4 @@
-import { respondModes, respondSystem, utterances } from "../config/prompts";
+import { respondSystem, utterances } from "../config/prompts";
 import { settings } from "../config/settings";
 import { hasTaste, stateSummary } from "../core/state";
 import type { ChatMessage, InformationState, LlmClient, Movie, NlgMode as Mode, Reply } from "../core/types";
@@ -59,7 +59,7 @@ export async function respond(llm: LlmClient, is: InformationState): Promise<Rep
   // The state is the last line of the system message, and the conversation follows as chat turns. Elisa's own turns
   // are written as the JSON she replies with, so the model keeps answering in JSON.
   const messages: ChatMessage[] = [
-    { role: "system", content: `${respondSystem}\n${respondModes[mode]}\n\nWhat you know now:\n${state}` },
+    { role: "system", content: `${respondSystem[mode]}\n\nWhat you know now:\n${state}` },
     ...is.history
       .slice(-d.historyForRespond)
       .map((t): ChatMessage => (t.speaker === "usr" ? { role: "user", content: t.text } : { role: "assistant", content: JSON.stringify({ say: t.text }) })),
