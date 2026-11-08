@@ -6,6 +6,10 @@ A spoken assistant that helps you pick a movie to watch. Built for the dialogue 
 
 It works in two phases. Phase 1 is a settings form: who is watching, the youngest viewer's age, a time limit, genres to skip and your streaming services. Those are hard filters, and they decide tonight's pool of movies. Phase 2 is a spoken chat with Elisa about what you are in the mood for, and she suggests movies from that pool until you take one. English only.
 
+The [project report](docs/report.md) covers the design and the results, and the [development history](docs/development-history.md) follows how the app changed, from the course labs to now.
+
+Known bugs and limitations are on the [GitHub issues tab](https://github.com/mparts/movie-assistant/issues).
+
 ## First run
 
 You need Node.js (developed on 24) and [Ollama](https://ollama.com).
@@ -27,7 +31,7 @@ You need Node.js (developed on 24) and [Ollama](https://ollama.com).
 
    Without the second model, set `enabled: false` on the `local` backend in `src/config/services.ts`.
 
-4. Optional: open the SSH tunnel to the university's llama3.1, which the NLU tries first. Without it the NLU falls back to Groq.
+4. Open the SSH tunnel to the university's llama3.1, which the NLU tries first. Everything was tuned with this model, so run it. Without the tunnel the NLU falls back to Groq, which counts against the daily limit.
 
    ```
    ssh -f -N -L 11435:127.0.0.1:11434 mltgpu-2
@@ -65,10 +69,12 @@ movie-assistant/
 │   ├── services/       TMDB, the LLM backends, embeddings, the local catalogue
 │   └── browser/        the top-level machine with speechstate, the settings form, the page
 ├── scripts/            typed chat, NLU and ranking benches, catalogue builder
-└── test/               vitest unit tests
+├── test/               vitest unit tests
+├── patches/            the local speechstate fix, applied on npm install
+└── docs/               the report, the development history, the AI log, the presentation
 ```
 
-Every folder under `src/`, and `scripts/` and `test/`, has a README that goes through its files.
+Every folder in the project has a README that goes through its files, apart from `.cache/` (built locally) and `public/` (Vite would ship a README with the page).
 
 ## How a conversation runs
 
@@ -159,14 +165,10 @@ score = 0.8·semantic + 0.1·popularity − avoid − reject + person
 
 Percentiles, because raw cosine similarities sit in a narrow band that moves with every query, so fixed weights on them would mean something different each turn. On percentiles every term runs from 0 to 1, and the weights compare like with like. The penalties only reach the top few percent, so "no princesses" sinks princess movies without pulling down every fairy tale. Movies already suggested, seen or turned down, and movies with an avoided person, are not eligible at all. `npm run rank-bench` is the regression set: hand-labelled wishes on two real pools, scored by recall@10 and forbidden titles in the top 10.
 
-## Limitations
-
-- Barge-in is off (`settings.speech.bargeIn: false`), so you cannot interrupt Elisa's longer replies.
-- Age limits use US certifications for everyone (`settings.intake.certification`), so movies without a US rating drop out of age-limited pools.
-- The chat, the prompts and the speech are English only.
-
-Further limitations are tracked on the [GitHub issues tab](https://github.com/mparts/movie-assistant/issues).
-
 ## Credits
 
 Built on SISU (speechstate meets information state update) by Vladislav Maraev, described in Maraev, Berman and Larsson, [Combining Information State Update, Harel Statecharts and LLMs for controllable and flexible Conversational AI](https://aclanthology.org/2025.clasp-main.3/), CLASP 2025.
+
+## Disclaimer
+
+Generative AI was used during development. [docs/AI_log.md](docs/AI_log.md) lists what it was used for and how the work was split between me and AI.

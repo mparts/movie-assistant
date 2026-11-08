@@ -5,7 +5,7 @@ import { parseIntake } from "../src/core/intake";
 
 describe("intake (Phase 1)", () => {
   test("every sample in profiles/ follows the contract", () => {
-    for (const f of readdirSync("profiles")) expect(() => parseIntake(JSON.parse(readFileSync(`profiles/${f}`, "utf8")))).not.toThrow();
+    for (const f of readdirSync("profiles").filter((f) => f.endsWith(".json"))) expect(() => parseIntake(JSON.parse(readFileSync(`profiles/${f}`, "utf8")))).not.toThrow();
   });
 
   const sample = {
