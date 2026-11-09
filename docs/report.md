@@ -90,7 +90,7 @@ A sample dialogue (illustrative, family profile, youngest viewer 8, 100 minutes)
 
 # 8. Evaluation
 
-- **`nlu-bench`**: 32 cases taken from real chats (wishes, avoids, people, rejections, accepts, negated tails). The university llama3.1 passes 30 to 31 of 32, and the misses vary between runs.
+- **`nlu-bench`**: 32 cases from my own test chats (wishes, avoids, people, rejections, accepts, negated tails). The university llama3.1 passes 30 to 31 of 32, and the misses vary between runs.
 - **`rank-bench`**: hand-labelled wishes on two real pools, scored by recall@10 and by forbidden titles in the top 10. Recall@10 is 52% (61 of 118) with 1 forbidden title (Shrek for "magical, but no princesses"). Widening the avoid penalty to 10% removed Shrek but cost recall, so it stays at 5%.
 - **Live typed chats** with three profiles (solo, couple, family) check that a whole conversation ends in a sensible pick.
 
